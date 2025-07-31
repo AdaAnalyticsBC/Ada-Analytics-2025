@@ -1,0 +1,32 @@
+{
+  "name": "ada-analytics-trading-agent",
+  "description": "Autonomous AI Trading Agent with Resend Email Integration",
+  "builder": "nixpacks",
+  "source": {
+    "type": "github",
+    "repo": "your-username/ada-analytics",
+    "branch": "main"
+  },
+  "variables": {
+    "ANTHROPIC_API_KEY": "",
+    "RESEND_API_KEY": "",
+    "ALPACA_API_KEY": "",
+    "ALPACA_SECRET_KEY": "",
+    "SUPABASE_ACCESS_TOKEN": "",
+    "QUIVER_API_TOKEN": "",
+    "BASE_URL": "https://your-app.railway.app",
+    "PORT": "3000",
+    "TZ": "America/New_York"
+  },
+  "domains": [
+    {
+      "domain": "your-custom-domain.com"
+    }
+  ],
+  "regions": ["us-west1"],
+  "settings": {
+    "buildCommand": "deno cache main.ts",
+    "startCommand": "deno run --allow-all main.ts",
+    "watchPaths": ["main.ts", "deno.json"]
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "name": "autonomous-trading-agent",
+  "version": "1.0.0",
+  "description": "Autonomous AI-powered trading agent with MCP integration using Deno",
+  "exports": "./main.ts",
+  "tasks": {
+    "dev": "deno run --allow-all --watch main.ts",
+    "start": "deno run --allow-all main.ts",
+    "prod": "deno run --allow-all --no-check --quiet main.ts",
+    "test": "deno test --allow-all --no-check main_test.ts",
+    "test:watch": "deno test --allow-all --no-check --watch main_test.ts",
+    "test:verbose": "./test.sh",
+    "fmt": "deno fmt",
+    "lint": "deno lint",
+    "check": "deno check main.ts",
+    "cache": "deno cache main.ts",
+    "deploy:railway": "./deploy-railway.sh",
+    "deploy:deno": "./deploy-deno.sh",
+    "control": "deno run --allow-net --allow-read --allow-env --allow-run control.ts",
+    "status": "deno run --allow-net --allow-read --allow-env --allow-run control.ts status",
+    "monitor": "deno run --allow-net --allow-read --allow-env --allow-run control.ts monitor",
+    "shutdown": "deno run --allow-net --allow-read --allow-env --allow-run control.ts shutdown",
+    "kill": "deno run --allow-net --allow-read --allow-env --allow-run control.ts kill",
+    "test:agent": "deno run --allow-net --allow-read --allow-env --allow-run control.ts test workflow"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true
+  },
+  "fmt": {
+    "files": {
+      "include": ["main.ts", "*.ts", "*.js"],
+      "exclude": ["node_modules/"]
+    },
+    "options": {
+      "useTabs": false,
+      "lineWidth": 80,
+      "indentWidth": 2,
+      "singleQuote": true,
+      "proseWrap": "preserve"
+    }
+  },
+  "lint": {
+    "files": {
+      "include": ["main.ts", "*.ts"],
+      "exclude": ["node_modules/"]
+    },
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["ban-untagged-todo"],
+      "exclude": ["no-unused-vars"]
+    }
+  },
+  "lock": false,
+  "nodeModulesDir": "none",
+  "imports": {
+    "@std/": "https://deno.land/std@0.208.0/",
+    "@anthropic/": "npm:@anthropic-ai/sdk@^0.30.0/",
+    "@mcp/": "npm:@modelcontextprotocol/sdk@^1.0.0/",
+    "resend": "npm:resend@^3.0.0",
+    "deno_cron": "https://deno.land/x/deno_cron@v1.0.0/cron.ts"
+  },
+  "permissions": {
+    "allow-net": [
+      "api.anthropic.com",
+      "api.resend.com",
+      "127.0.0.1",
+      "localhost"
+    ],
+    "allow-read": [
+      "./agent_state.json",
+      "./.env",
+      "./.env.template"
+    ],
+    "allow-write": [
+      "./agent_state.json"
+    ],
+    "allow-env": [
+      "ANTHROPIC_API_KEY",
+      "RESEND_API_KEY",
+      "BASE_URL",
+      "PORT",
+      "TZ",
+      "ALPACA_API_KEY",
+      "ALPACA_SECRET_KEY",
+      "SUPABASE_ACCESS_TOKEN",
+      "QUIVER_API_TOKEN"
+    ],
+    "allow-run": [
+      "deno",
+      "python",
+      "node"
+    ]
+  }
+}

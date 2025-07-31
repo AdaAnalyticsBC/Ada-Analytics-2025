@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Ada Analytics Trading Agent Control Script
+# Wrapper for the control.ts CLI tool
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run the Deno control script
+exec deno run --allow-net --allow-read --allow-env --allow-run "$SCRIPT_DIR/control.ts" "$@"
