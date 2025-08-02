@@ -1,15 +1,12 @@
-FROM denoland/deno:1.40.0
+FROM denoland/deno:1.42.0
 
 WORKDIR /app
 
-# Copy deno configuration
-COPY deno.json deno.lock ./
-
-# Cache dependencies
-RUN deno cache main.ts
-
-# Copy application code
+# Copy application code first
 COPY . .
+
+# Cache dependencies (without lockfile)
+RUN deno cache --reload main.ts
 
 # Expose port for HTTP transport
 EXPOSE 8000

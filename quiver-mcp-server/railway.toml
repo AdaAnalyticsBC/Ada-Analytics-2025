@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "deno cache main.ts"
+buildCommand = "deno cache --reload main.ts"
 
 [deploy]
 startCommand = "deno run --allow-all main.ts"
