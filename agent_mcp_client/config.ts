@@ -10,32 +10,10 @@ export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> 
   const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
   
   if (isRailway) {
-    console.log("🚂 Running in Railway environment - using HTTP MCP servers");
-    // In Railway, we'll use HTTP transport to connect to separate MCP services
-    // These will be deployed as separate Railway services
-    return {
-      alpaca: {
-        command: "python3",
-        args: ["../alpaca-mcp-server/alpaca_mcp_server.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"],
-        env: {
-          ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
-          ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
-          ALPACA_PAPER_TRADE: "True"
-        }
-      },
-      supabase: {
-        command: "npx",
-        args: ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || '', "--access-token", Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''],
-        env: {}
-      },
-      "quiver-quant": {
-        command: "deno",
-        args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
-        env: {
-          QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
-        }
-      }
-    };
+    console.log("🚂 Running in Railway environment - using direct API calls");
+    // In Railway, we'll use direct API calls instead of MCP servers
+    // This is more reliable and cost-effective
+    return {};
   }
   
   let pythonCommand = "python3";

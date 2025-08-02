@@ -1,10 +1,13 @@
 [build]
 builder = "nixpacks"
-buildCommand = "deno cache main_new.ts"
+buildCommand = "deno cache --reload main_new.ts"
 
 [deploy]
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "always"
 restartPolicyMaxRetries = 3
-startCommand = "deno run --allow-all --no-check main_new.ts"
+startCommand = "deno run --allow-all main_new.ts"
+
+[logs]
+type = "http"
