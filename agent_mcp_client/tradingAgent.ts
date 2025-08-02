@@ -1,0 +1,617 @@
+/**
+ * Main Trading Agent - Orchestrates all services for autonomous trading
+ */
+
+import { Client } from "npm:@modelcontextprotocol/sdk@^1.0.0/client/index.js";
+import { StdioClientTransport } from "npm:@modelcontextprotocol/sdk@^1.0.0/client/stdio.js";
+import { cron } from "https://deno.land/x/deno_cron@v1.0.0/cron.ts";
+import { load } from "https://deno.land/std@0.208.0/dotenv/mod.ts";
+import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
+
+// Import types and interfaces
+import { 
+  AgentState, 
+  TradePlan, 
+  MCPServerConfig,
+  AccountDetails,
+  ExecutedTrade
+} from './types/interfaces.ts';
+
+// Import configuration
+import { 
+  MCP_SERVERS, 
+  CRON_SCHEDULES, 
+  FILE_PATHS, 
+  DEFAULT_AGENT_STATE,
+  validateEnvironment,
+  getEnvObject
+} from './config.ts';
+
+// Import services
+import { MarketDataService } from './services/marketDataService.ts';
+import { TradingService } from './services/tradingService.ts';
+import { EmailService } from './services/emailService.ts';
+import { DatabaseService } from './services/databaseService.ts';
+import { AIService } from './services/aiService.ts';
+
+// Import utilities
+import { Logger } from './utils/logger.ts';
+import { WebServer } from './webServer.ts';
+
+export class AutonomousTradingAgent {
+  // Core state
+  private state: AgentState;
+  private isShuttingDown: boolean = false;
+  
+  // MCP Clients
+  private activeClients: Map<string, Client> = new Map();
+  
+  // Services
+  private logger!: Logger;
+  private marketDataService!: MarketDataService;
+  private tradingService!: TradingService;
+  private emailService!: EmailService;
+  private databaseService!: DatabaseService;
+  private aiService!: AIService;
+  private webServer!: WebServer;
+  
+  // System components
+  private cronJob: unknown;
+  private shutdownCallbacks: (() => Promise<void>)[] = [];
+
+  constructor() {
+    // Initialize state
+    this.state = { ...DEFAULT_AGENT_STATE };
+    
+    // Initialize logger
+    this.logger = new Logger();
+  }
+
+  /**
+   * Initialize the agent
+   */
+  async initialize(): Promise<void> {
+    this.logger.log('STATUS', '🤖 Initializing Ada Analytics Trading Agent...');
+
+    // Load environment variables
+    try {
+      await load({ export: true });
+    } catch (error) {
+      // Silently fall back to system environment variables
+      this.logger.log('STATUS', 'Using system environment variables');
+    }
+
+    // Validate environment
+    const envValidation = validateEnvironment();
+    if (!envValidation.valid) {
+      throw new Error(`Missing required environment variables: ${envValidation.missing.join(', ')}`);
+    }
+
+    // Load existing state
+    await this.loadState();
+
+    // Initialize services (without clients initially)
+    this.initializeServices();
+
+    this.logger.log('STATUS', '✅ Agent initialization complete');
+  }
+
+  /**
+   * Initialize all services
+   */
+  private initializeServices(): void {
+    // Initialize services with null clients initially
+    this.marketDataService = new MarketDataService(null, this.logger);
+    this.tradingService = new TradingService(null, this.logger);
+    this.emailService = new EmailService(this.logger, Deno.env.get("BASE_URL") || 'http://localhost:3000');
+    this.databaseService = new DatabaseService(null, this.logger);
+    this.aiService = new AIService(this.logger);
+
+    // Initialize web server
+    this.webServer = new WebServer(
+      this.logger,
+      {
+        marketDataService: this.marketDataService,
+        tradingService: this.tradingService,
+        emailService: this.emailService,
+        databaseService: this.databaseService,
+        aiService: this.aiService
+      },
+      {
+        getAgentState: () => this.state,
+        updateAgentState: (updates) => this.updateAgentState(updates)
+      }
+    );
+  }
+
+  /**
+   * Connect to all MCP servers
+   */
+  async connectToServers(): Promise<void> {
+    this.logger.log('STATUS', 'Connecting to MCP servers...');
+
+    for (const [serverName, config] of Object.entries(MCP_SERVERS)) {
+      try {
+        const transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args,
+          env: {
+            ...getEnvObject(),
+            ...config.env
+          }
+        });
+
+        const client = new Client({
+          name: `trading-agent-${serverName}`,
+          version: "1.0.0"
+        });
+
+        await client.connect(transport);
+        this.activeClients.set(serverName, client);
+        
+        // Update services with connected clients
+        this.updateServiceClients(serverName, client);
+        
+        this.logger.log('STATUS', `✅ Connected to ${serverName}`);
+        
+      } catch (error) {
+        this.logger.log('ALERT', `Failed to connect to ${serverName}: ${error}`);
+      }
+    }
+
+    if (this.activeClients.size === 0) {
+      throw new Error('Failed to connect to any MCP servers');
+    }
+
+    this.logger.log('STATUS', `Connected to ${this.activeClients.size}/${Object.keys(MCP_SERVERS).length} MCP servers`);
+  }
+
+  /**
+   * Update services with connected clients
+   */
+  private updateServiceClients(serverName: string, client: Client): void {
+    switch (serverName) {
+      case 'quiver-quant':
+        this.marketDataService.setQuiverClient(client);
+        break;
+      case 'alpaca':
+        this.tradingService.setAlpacaClient(client);
+        break;
+      case 'supabase':
+        this.databaseService.setSupabaseClient(client);
+        break;
+    }
+  }
+
+  /**
+   * Main trading workflow execution
+   */
+  async runTradingWorkflow(): Promise<void> {
+    if (this.state.is_paused) {
+      this.logger.log('ALERT', 'Agent is PAUSED - Skipping trading workflow');
+      return;
+    }
+
+    try {
+      // Trading workflow header
+      console.log('\n' + '─'.repeat(60));
+      this.logger.log('STATUS', '🚀 DAILY TRADING WORKFLOW STARTED');
+      console.log('─'.repeat(60));
+
+      // Step 1: Collect market data with historical context
+      this.logger.log('ANALYSIS', 'Step 1: Collecting market data...');
+      const marketData = await this.collectMarketDataWithHistory();
+
+      // Step 2: Craft initial trade plan
+      this.logger.log('PLAN', 'Step 2: Crafting trade plan...');
+      let tradePlan = await this.aiService.craftTradePlan(marketData, this.state);
+
+      // Step 3: Make predictions
+      this.logger.log('ANALYSIS', 'Step 3: Running AI predictions...');
+      tradePlan = await this.aiService.makePredictions(tradePlan, marketData, this.state);
+
+      // Step 4: Finalize trade plan
+      this.logger.log('PLAN', 'Step 4: Finalizing trade plan...');
+      tradePlan = await this.finalizeTradePlan(tradePlan);
+      
+      // Show trade plan summary
+      this.logTradePlanSummary(tradePlan);
+
+      // Step 5: Email trade plan
+      this.logger.log('STATUS', 'Step 5: Sending trade plan notifications...');
+      const pauseToken = await this.emailService.sendTradePlanEmail(tradePlan);
+      this.state.pause_token = pauseToken;
+      await this.saveState();
+
+      // Step 6: Wait for market open if needed
+      await this.tradingService.waitForMarketOpen();
+
+      // Step 7: Execute trades
+      if (tradePlan.trades.length > 0) {
+        this.logger.log('TRADE', `Step 7: Executing ${tradePlan.trades.length} trades...`);
+        const executedTrades = await this.tradingService.executeTrades(tradePlan, this.state);
+        
+        this.logExecutionResults(executedTrades);
+
+        // Step 8: Store trades with enhanced data
+        if (executedTrades.filter(t => t.status === 'executed').length > 0) {
+          this.logger.log('STATUS', 'Step 8: Storing trade records...');
+          const thoughtChain = this.generateThoughtChain(tradePlan, executedTrades);
+          await this.databaseService.storeTrades(executedTrades, tradePlan, thoughtChain);
+        }
+      } else {
+        this.logger.log('STATUS', 'No trades to execute today');
+      }
+
+      // Update state
+      this.state.last_run = new Date().toISOString();
+      await this.saveState();
+
+      console.log('─'.repeat(60));
+      this.logger.log('STATUS', '✅ TRADING WORKFLOW COMPLETED SUCCESSFULLY');
+      console.log('─'.repeat(60) + '\n');
+
+    } catch (error: unknown) {
+      console.log('─'.repeat(60));
+      this.logger.log('ALERT', `❌ TRADING WORKFLOW FAILED: ${error}`);
+      console.log('─'.repeat(60) + '\n');
+      
+      await this.handleWorkflowError(error);
+    }
+  }
+
+  /**
+   * Send daily summary
+   */
+  async sendDailySummary(): Promise<void> {
+    this.logger.log('STATUS', 'Generating daily summary...');
+
+    try {
+      const accountDetails = await this.tradingService.getAccountDetails();
+      const todayTrades = await this.databaseService.getTodayTrades();
+      
+      await this.emailService.sendDailySummary(accountDetails, todayTrades);
+      
+      this.logger.log('STATUS', 'Daily summary sent successfully');
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to send daily summary: ${error}`);
+    }
+  }
+
+  /**
+   * Setup cron jobs
+   */
+  setupCronJobs(): void {
+    // Daily workflow - runs at 6 AM EST (data collection and planning)
+    cron(CRON_SCHEDULES.DAILY_TRADING, async () => {
+      this.logger.log('STATUS', 'Starting scheduled trading workflow');
+      await this.runTradingWorkflow();
+    });
+
+    // End of day summary - runs at 5 PM EST
+    cron(CRON_SCHEDULES.END_OF_DAY_SUMMARY, async () => {
+      this.logger.log('STATUS', 'Starting end-of-day summary');
+      await this.sendDailySummary();
+    });
+
+    // Cleanup old logs - runs weekly on Sunday at midnight
+    cron(CRON_SCHEDULES.WEEKLY_CLEANUP, async () => {
+      await this.databaseService.cleanupOldLogs();
+    });
+
+    this.logger.log('STATUS', '📅 Cron jobs scheduled successfully');
+  }
+
+  /**
+   * Start the agent
+   */
+  async start(): Promise<void> {
+    try {
+      console.log('\n🤖 Starting Ada Analytics Trading Agent...\n');
+      
+      // Initialize
+      await this.initialize();
+      
+      // Setup signal handlers
+      this.setupSignalHandlers();
+      
+      // Connect to MCP servers
+      await this.connectToServers();
+      
+      // Get initial account balance
+      await this.updateAccountBalance();
+      
+      // Setup cron jobs
+      this.setupCronJobs();
+      
+      // Start web server
+      await this.webServer.start();
+      
+      // Send startup notification
+      if (this.emailService.isConfigured()) {
+        await this.emailService.sendStartupNotification(
+          this.state.account_balance,
+          Array.from(this.activeClients.keys())
+        );
+      }
+      
+      // Log startup completion
+      this.logStartupSummary();
+      
+      await this.databaseService.log('INFO', 'Autonomous Trading Agent started successfully');
+      
+    } catch (error) {
+      this.logger.log('ALERT', `💥 Failed to start Trading Agent: ${error}`);
+      Deno.exit(1);
+    }
+  }
+
+  /**
+   * Graceful shutdown
+   */
+  async gracefulShutdown(reason: string = 'Manual shutdown'): Promise<void> {
+    if (this.isShuttingDown) {
+      this.logger.log('STATUS', '🔄 Shutdown already in progress...');
+      return;
+    }
+
+    this.isShuttingDown = true;
+    this.logger.log('ALERT', `🛑 Initiating graceful shutdown: ${reason}`);
+
+    try {
+      // 1. Pause trading immediately
+      this.state.is_paused = true;
+      this.logger.log('STATUS', '⏸️ Trading paused for shutdown');
+
+      // 2. Cancel any pending trades
+      try {
+        await this.tradingService.cancelAllOrders();
+        this.logger.log('STATUS', '🚫 All pending orders cancelled');
+      } catch (error) {
+        this.logger.log('ALERT', `Failed to cancel orders: ${error}`);
+      }
+
+      // 3. Save current state
+      this.logger.log('STATUS', '💾 Saving agent state...');
+      await this.saveState();
+
+      // 4. Log shutdown event
+      try {
+        await this.databaseService.storeAgentEvent('shutdown', reason, {
+          account_balance: this.state.account_balance,
+          open_positions: this.state.open_positions.length
+        });
+      } catch (error) {
+        this.logger.log('ALERT', `Failed to log shutdown event: ${error}`);
+      }
+
+      // 5. Run shutdown callbacks
+      this.logger.log('STATUS', '🔄 Running cleanup callbacks...');
+      for (const callback of this.shutdownCallbacks) {
+        try {
+          await callback();
+        } catch (error) {
+          this.logger.log('ALERT', `Shutdown callback failed: ${error}`);
+        }
+      }
+
+      // 6. Close web server
+      this.logger.log('STATUS', '🌐 Shutting down web server...');
+      await this.webServer.stop();
+
+      // 7. Close MCP connections
+      this.logger.log('STATUS', '🔌 Closing MCP connections...');
+      for (const [name, client] of this.activeClients) {
+        try {
+          if (client.close) {
+            await client.close();
+          }
+          this.logger.log('STATUS', `✅ Closed ${name} connection`);
+        } catch (error) {
+          this.logger.log('ALERT', `Failed to close ${name}: ${error}`);
+        }
+      }
+
+      // 8. Send shutdown notification
+      if (this.emailService.isConfigured()) {
+        try {
+          await this.emailService.sendShutdownNotification(
+            reason,
+            this.state.account_balance,
+            this.state.open_positions.length
+          );
+        } catch (error) {
+          this.logger.log('ALERT', `Failed to send shutdown email: ${error}`);
+        }
+      }
+
+      this.logger.log('STATUS', '✅ Graceful shutdown completed');
+      console.log('\n🔒 Agent shutdown complete. Safe to restart.');
+
+    } catch (error) {
+      this.logger.log('ALERT', `❌ Error during shutdown: ${error}`);
+    }
+  }
+
+  // Private helper methods
+
+  private async collectMarketDataWithHistory(): Promise<Record<string, unknown>> {
+    // Get regular market data
+    const marketData = await this.marketDataService.collectMarketData();
+    
+    // Add trading performance context
+    const performance = await this.databaseService.getTradingPerformance();
+    
+    // Add recent trades for context
+    const recentTrades = await this.databaseService.getHistoricalTrades(7);
+    
+    return {
+      ...marketData,
+      trading_performance: performance,
+      recent_trades: recentTrades,
+      account_balance: this.state.account_balance,
+      last_run: this.state.last_run
+    };
+  }
+
+  private async finalizeTradePlan(tradePlan: TradePlan): Promise<TradePlan> {
+    this.logger.log('ANALYSIS', 'Finalizing trade plan...');
+
+    // Check yesterday's trades for evaluation
+    const yesterdayTrades = await this.databaseService.getYesterdayTrades();
+    
+    if (yesterdayTrades.length > 0) {
+      this.logger.log('STATUS', `Found ${yesterdayTrades.length} trades from yesterday, analyzing performance...`);
+      
+      // Analyze yesterday's performance
+      const performanceAnalysis = await this.aiService.analyzeTradePerformance(yesterdayTrades);
+      
+      // Adjust strategy if needed
+      if (performanceAnalysis.should_adjust) {
+        this.logger.log('ANALYSIS', 'Adjusting strategy based on performance analysis');
+        tradePlan = await this.aiService.adjustTradePlan(tradePlan, performanceAnalysis);
+        
+        // Update current strategy
+        if (performanceAnalysis.new_strategy_focus) {
+          this.state.current_strategy = performanceAnalysis.new_strategy_focus;
+          await this.saveState();
+        }
+      }
+    }
+
+    // Final validation
+    tradePlan.trades = tradePlan.trades.filter(trade => {
+      const positionSize = (this.state.account_balance * 0.01) / trade.price_target;
+      return positionSize > 0 && trade.confidence > 0.6;
+    });
+
+    // Store predictions
+    await this.databaseService.storePredictions(tradePlan);
+
+    this.logger.log('STATUS', `Finalized trade plan with ${tradePlan.trades.length} trades`);
+    return tradePlan;
+  }
+
+  private async updateAccountBalance(): Promise<void> {
+    try {
+      const accountDetails = await this.tradingService.getAccountDetails();
+      this.state.account_balance = accountDetails.balance;
+      await this.saveState();
+      
+      this.logger.log('STATUS', `Account balance updated: $${accountDetails.balance.toLocaleString()}`);
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to update account balance: ${error}`);
+    }
+  }
+
+  private async updateAgentState(updates: Partial<AgentState>): Promise<void> {
+    this.state = { ...this.state, ...updates };
+    await this.saveState();
+  }
+
+  private async saveState(): Promise<void> {
+    try {
+      await Deno.writeTextFile(FILE_PATHS.AGENT_STATE, JSON.stringify(this.state, null, 2));
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to save state: ${error}`);
+    }
+  }
+
+  private async loadState(): Promise<void> {
+    try {
+      const stateData = await Deno.readTextFile(FILE_PATHS.AGENT_STATE);
+      this.state = { ...this.state, ...JSON.parse(stateData) };
+      this.logger.log('STATUS', 'Agent state loaded successfully');
+    } catch (error) {
+      this.logger.log('STATUS', 'No existing state found, using defaults');
+    }
+  }
+
+  private setupSignalHandlers(): void {
+    // Handle SIGINT (Ctrl+C)
+    const handleSigInt = () => {
+      console.log('\n⚠️ Received SIGINT (Ctrl+C)...');
+      this.gracefulShutdown('SIGINT received').then(() => {
+        Deno.exit(0);
+      });
+    };
+
+    // Handle SIGTERM
+    const handleSigTerm = () => {
+      console.log('\n⚠️ Received SIGTERM...');
+      this.gracefulShutdown('SIGTERM received').then(() => {
+        Deno.exit(0);
+      });
+    };
+
+    try {
+      if (Deno.build.os !== 'windows') {
+        Deno.addSignalListener('SIGINT', handleSigInt);
+        Deno.addSignalListener('SIGTERM', handleSigTerm);
+      }
+    } catch (error) {
+      this.logger.log('ALERT', `Could not setup signal handlers: ${error}`);
+    }
+  }
+
+  private async handleWorkflowError(error: unknown): Promise<void> {
+    // On critical errors, pause the agent
+    if (error instanceof Error && (error.message.includes('CRITICAL') || error.message.includes('API_ERROR'))) {
+      this.state.is_paused = true;
+      await this.saveState();
+      this.logger.log('ALERT', '🛑 AGENT PAUSED due to critical error');
+      await this.emailService.sendErrorAlert(error);
+    }
+  }
+
+  private generateThoughtChain(tradePlan: TradePlan, executedTrades: ExecutedTrade[]): string[] {
+    return [
+      `Market analysis: ${tradePlan.market_analysis}`,
+      `Risk assessment: ${tradePlan.risk_assessment}`,
+      `Strategy: ${this.state.current_strategy}`,
+      `Account balance: $${this.state.account_balance}`,
+      `Trades planned: ${tradePlan.trades.length}`,
+      `Trades executed: ${executedTrades.filter(t => t.status === 'executed').length}`
+    ];
+  }
+
+  private logTradePlanSummary(tradePlan: TradePlan): void {
+    console.log('\n📋 TRADE PLAN SUMMARY:');
+    console.log(`   • Trades planned: ${tradePlan.trades.length}`);
+    console.log(`   • Risk exposure: ${(tradePlan.total_risk_exposure * 100).toFixed(2)}%`);
+    if (tradePlan.trades.length > 0) {
+      tradePlan.trades.forEach((trade, i) => {
+        console.log(`   ${i + 1}. ${trade.action} ${trade.symbol} (${trade.quantity} shares) - $${trade.price_target}`);
+      });
+    }
+  }
+
+  private logExecutionResults(executedTrades: ExecutedTrade[]): void {
+    console.log('\n🔄 TRADE EXECUTION RESULTS:');
+    const successfulTrades = executedTrades.filter(t => t.status === 'executed');
+    if (successfulTrades.length > 0) {
+      successfulTrades.forEach((trade, i) => {
+        console.log(`   ✅ ${i + 1}. ${trade.action} ${trade.symbol} - ${trade.executed_quantity} shares at $${trade.filled_avg_price || 'pending'}`);
+      });
+    } else {
+      console.log('   ⚠️  No trades executed');
+    }
+  }
+
+  private logStartupSummary(): void {
+    console.log('\n' + '='.repeat(80));
+    console.log('🎯 ADA ANALYTICS TRADING AGENT - READY FOR ACTION');
+    console.log('='.repeat(80));
+    this.logger.log('STATUS', `Account Balance: $${this.state.account_balance.toLocaleString()}`);
+    this.logger.log('STATUS', `Strategy: ${this.state.current_strategy.toUpperCase()}`);
+    this.logger.log('STATUS', `MCP Servers: ${this.activeClients.size} connected`);
+    this.logger.log('STATUS', `Web Interface: ${Deno.env.get("BASE_URL") || 'http://localhost:3000'}`);
+    this.logger.log('STATUS', `Daily Trading: 6:00 AM EST`);
+    if (this.emailService.isConfigured()) {
+      this.logger.log('STATUS', 'Email Alerts: ENABLED');
+    } else {
+      this.logger.log('ALERT', 'Email Alerts: DISABLED (Configure RESEND_API_KEY)');
+    }
+    console.log('='.repeat(80) + '\n');
+  }
+}

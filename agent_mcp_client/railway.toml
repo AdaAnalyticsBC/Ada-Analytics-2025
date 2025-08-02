@@ -1,0 +1,37 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "always"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "ada-analytics-agent"
+
+[services.source]
+repo = "your-username/ada-analytics"
+rootDirectory = "/Ada-Analytics/agent_mcp_client"
+
+[services.variables]
+NODE_ENV = "production"
+TZ = "America/New_York"
+PORT = { $generate = "PORT" }
+
+[services.healthcheck]
+path = "/api/health"
+interval = 30
+timeout = 10
+retries = 3
+
+[services.resources]
+memory = 1024
+cpu = 1000
+
+[services.autoscaling]
+enabled = true
+minReplicas = 1
+maxReplicas = 2
+targetCPU = 80
+targetMemory = 80

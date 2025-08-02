@@ -1,26 +1,26 @@
-# Use the official Deno image
-FROM denoland/deno:1.40.2
+# 🤖 Ada Analytics Trading Agent - Railway Deployment
+FROM denoland/deno:alpine-1.40.2
 
-# Set the working directory
+# Set working directory
 WORKDIR /app
 
-# Copy the application files
+# Copy source code
 COPY . .
 
 # Cache dependencies
-RUN deno cache main.ts
+RUN deno cache main_new.ts
 
-# Create a non-root user
-RUN useradd --create-home --shell /bin/bash deno_user
-RUN chown -R deno_user:deno_user /app
-USER deno_user
+# Create non-root user for security
+RUN addgroup -g 1001 -S deno && \
+    adduser -S deno -u 1001
+USER deno
 
-# Expose the port that the app runs on
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD deno eval --allow-net 'try { const r = await fetch(`http://localhost:${Deno.env.get("PORT") || "3000"}/api/health`); if (!r.ok) Deno.exit(1); } catch { Deno.exit(1); }'
+
+# Expose port
 EXPOSE 3000
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
-
-# Run the application
-CMD ["deno", "run", "--allow-all", "main.ts"]
+# Start the application
+CMD ["deno", "run", "--allow-all", "--no-check", "main_new.ts"]

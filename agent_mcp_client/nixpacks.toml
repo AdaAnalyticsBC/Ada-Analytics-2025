@@ -1,0 +1,10 @@
+[phases.setup]
+nixPkgs = ["deno"]
+
+[phases.build]
+cmds = [
+    "deno cache main_new.ts"
+]
+
+[start]
+cmd = "deno run --allow-all --no-check main_new.ts"

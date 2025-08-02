@@ -9,15 +9,15 @@ import {
   assertThrows,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { stub, restore, Stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
-import AutonomousTradingAgent from "./main.ts";
+import { AutonomousTradingAgent } from "./tradingAgent.ts";
 
 // Mock MCP Client for testing
 class MockMCPClient {
-  private responses: Map<string, any> = new Map();
+  private responses: Map<string, Record<string, unknown>> = new Map();
   private shouldFail = false;
   private failMessage = "Mock failure";
 
-  setResponse(toolName: string, response: any) {
+  setResponse(toolName: string, response: Record<string, unknown>) {
     this.responses.set(toolName, response);
   }
 
@@ -26,7 +26,7 @@ class MockMCPClient {
     this.failMessage = message;
   }
 
-  async callTool(params: { name: string; arguments?: any }): Promise<any> {
+  callTool(params: { name: string; arguments?: Record<string, unknown> }): Record<string, unknown> {
     if (this.shouldFail) {
       throw new Error(this.failMessage);
     }
@@ -39,7 +39,7 @@ class MockMCPClient {
     return response;
   }
 
-  async listTools() {
+  listTools() {
     return {
       tools: [
         { name: "get_account_info", description: "Get account information" },
@@ -51,7 +51,7 @@ class MockMCPClient {
     };
   }
 
-  async connect() {
+  connect() {
     if (this.shouldFail) {
       throw new Error(this.failMessage);
     }
@@ -60,12 +60,7 @@ class MockMCPClient {
 
 // Test utilities
 function createTestAgent(): AutonomousTradingAgent {
-  // Set test environment variables
-  Deno.env.set("ANTHROPIC_API_KEY", "test-key");
-  Deno.env.set("RESEND_API_KEY", "test-resend-key");
-  Deno.env.set("BASE_URL", "http://localhost:3000");
-  Deno.env.set("ALPACA_API_KEY", "test-alpaca");
-  Deno.env.set("ALPACA_SECRET_KEY", "test-secret");
+  // Environment variables should be set in .env file for testing
   
   return new AutonomousTradingAgent();
 }
@@ -153,14 +148,14 @@ Deno.test("Account Details - Successful retrieval", async function() {
   const mockClient = new MockMCPClient();
   mockClient.setResponse("get_account_info", createMockAccountResponse());
   
-  // @ts-ignore - Access private property for testing
+  // @ts-ignore: Testing internal method - Access private property for testing
   agent.activeClients.set("alpaca", mockClient);
   
-  // @ts-ignore - Call private method for testing
+  // @ts-ignore: Testing internal method - Call private method for testing
   const result = await agent.getAccountDetails();
   
   assertExists(result);
-  // @ts-ignore - Access private property
+  // @ts-ignore: Testing internal method - Access private property
   assertEquals(agent.state.account_balance, 50000);
 });
 
@@ -171,10 +166,10 @@ Deno.test("Account Details - Handle API failure", async function() {
   const mockClient = new MockMCPClient();
   mockClient.setShouldFail(true, "API Error");
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("alpaca", mockClient);
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const result = await agent.getAccountDetails();
   
   assertEquals(result, {});
@@ -199,7 +194,7 @@ Deno.test("Market Data Collection - Success", async function() {
   });
   
   // Override listTools to return data-related tools
-  mockQuiverClient.listTools = async () => ({
+      mockQuiverClient.listTools = () => ({
     tools: [
       { name: "insider_data", description: "Get insider trading data" },
       { name: "market_sentiment", description: "Get market sentiment" },
@@ -212,12 +207,12 @@ Deno.test("Market Data Collection - Success", async function() {
     content: [{ text: "Mock Alpaca data" }]
   });
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("quiver-quant", mockQuiverClient);
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("alpaca", mockAlpacaClient);
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const marketData = await agent.collectMarketData();
   
   assertExists(marketData);
@@ -243,14 +238,14 @@ Deno.test("Trade Plan Creation - Valid output", async function() {
     }]
   };
   
-  // @ts-ignore - Mock the anthropic client
+  // @ts-ignore: Testing internal method - Mock the anthropic client
   const anthropicStub = stub(agent.anthropic.messages, "create", () => 
     Promise.resolve(mockAnthropicResponse)
   );
   
   try {
     const mockMarketData = { test: "data" };
-    // @ts-ignore
+    // @ts-ignore: Testing internal method: Testing internal method
     const tradePlan = await agent.craftTradePlan(mockMarketData);
     
     assertExists(tradePlan);
@@ -267,7 +262,7 @@ Deno.test("Trade Execution - Successful execution", async function() {
   await agent.initialize();
   
   // Set a high account balance to ensure position sizing works
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.state.account_balance = 100000;
   
   const mockAlpacaClient = new MockMCPClient();
@@ -280,12 +275,12 @@ Deno.test("Trade Execution - Successful execution", async function() {
     status: "filled"
   });
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("alpaca", mockAlpacaClient);
   
   const tradePlan = createMockTradePlan();
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const executedTrades = await agent.executeTrades(tradePlan);
   
   assertExists(executedTrades);
@@ -304,7 +299,7 @@ Deno.test("Store Trades - Successful storage", async function() {
   const mockSupabaseClient = new MockMCPClient();
   mockSupabaseClient.setResponse("insert", { success: true });
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("supabase", mockSupabaseClient);
   
   const mockTrades = [{
@@ -319,7 +314,7 @@ Deno.test("Store Trades - Successful storage", async function() {
     executed_at: new Date().toISOString()
   }];
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   await agent.storeTrades(mockTrades);
   
   // If no error thrown, storage succeeded
@@ -337,14 +332,14 @@ Deno.test("Store Trades - Handle Supabase failure", async function() {
   const mockLogClient = new MockMCPClient();
   mockLogClient.setResponse("insert", { success: true });
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   agent.activeClients.set("supabase", mockSupabaseClient);
   
   const mockTrades = [{ symbol: "TEST", executed_quantity: 10 }];
   
   // Should handle error gracefully without throwing
   try {
-    // @ts-ignore
+    // @ts-ignore: Testing internal method: Testing internal method
     await agent.storeTrades(mockTrades);
     assert(true, "Trade storage error was handled gracefully");
   } catch (error) {
@@ -360,7 +355,7 @@ Deno.test("Store Trades - Handle Supabase failure", async function() {
 Deno.test("Email Configuration - Check detection", function() {
   const agent = createTestAgent();
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const isConfigured = agent.isEmailConfigured();
   
   assertEquals(isConfigured, true); // Should be true with test key
@@ -376,7 +371,7 @@ Deno.test("Email Configuration - Missing API key", function() {
   // Create agent without calling createTestAgent which sets the env var
   const agent = new AutonomousTradingAgent();
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const isConfigured = agent.isEmailConfigured();
   
   assertEquals(isConfigured, false);
@@ -385,7 +380,7 @@ Deno.test("Email Configuration - Missing API key", function() {
   if (originalValue) {
     Deno.env.set("RESEND_API_KEY", originalValue);
   } else {
-    Deno.env.set("RESEND_API_KEY", "test-resend-key");
+    Deno.env.delete("RESEND_API_KEY");
   }
 });
 
@@ -397,10 +392,10 @@ Deno.test("Trading Workflow - Handle paused state", async function() {
   const agent = createTestAgent();
   await agent.initialize();
   
-  // @ts-ignore - Set agent to paused
+  // @ts-ignore: Testing internal method - Set agent to paused
   agent.state.is_paused = true;
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   await agent.runTradingWorkflow();
   
   // Should complete without error when paused
@@ -411,12 +406,12 @@ Deno.test("Risk Management - Validate position sizing", async function() {
   const agent = createTestAgent();
   await agent.initialize();
   
-  // @ts-ignore - Set account balance
+  // @ts-ignore: Testing internal method - Set account balance
   agent.state.account_balance = 100000;
   
   const tradePlan = createMockTradePlan();
   
-  // @ts-ignore
+  // @ts-ignore: Testing internal method
   const finalPlan = await agent.finalizeTradePlan(tradePlan);
   
   assertExists(finalPlan);
