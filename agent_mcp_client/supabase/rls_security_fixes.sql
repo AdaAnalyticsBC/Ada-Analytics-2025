@@ -117,6 +117,16 @@ DROP POLICY IF EXISTS "api_usage_insert_policy" ON api_usage_tracking;
 DROP POLICY IF EXISTS "api_usage_update_policy" ON api_usage_tracking;
 
 -- =====================================================
+-- 2.5. DROP TRIGGERS (to handle function dependencies)
+-- =====================================================
+
+-- Drop triggers that depend on update_updated_at function
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+DROP TRIGGER IF EXISTS update_trades_updated_at ON trades;
+DROP TRIGGER IF EXISTS update_trade_plans_updated_at ON trade_plans;
+DROP TRIGGER IF EXISTS update_api_usage_updated_at ON api_usage_tracking;
+
+-- =====================================================
 -- 3. FIX ROLE MUTABLE SEARCH_PATH FUNCTIONS
 -- =====================================================
 
@@ -199,6 +209,27 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog;
+
+-- =====================================================
+-- 3.5. RECREATE TRIGGERS
+-- =====================================================
+
+-- Recreate triggers with the updated function
+CREATE TRIGGER update_user_profiles_updated_at
+  BEFORE UPDATE ON user_profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_trades_updated_at
+  BEFORE UPDATE ON trades
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_trade_plans_updated_at
+  BEFORE UPDATE ON trade_plans
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_api_usage_updated_at
+  BEFORE UPDATE ON api_usage_tracking
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- =====================================================
 -- 4. RECREATE ENHANCED RLS POLICIES
