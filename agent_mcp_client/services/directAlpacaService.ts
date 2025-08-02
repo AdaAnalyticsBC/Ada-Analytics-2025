@@ -2,7 +2,7 @@
  * Direct Alpaca API Service - Replaces MCP server for Railway deployment
  */
 
-import { ITradingService, TradingLogger, AccountDetails, Position, Order, ExecutedTrade } from '../types/interfaces.ts';
+import { ITradingService, TradingLogger, AccountDetails, Position, Order, ExecutedTrade, TradePlan, AgentState, TradeDecision } from '../types/interfaces.ts';
 
 export class DirectAlpacaService implements ITradingService {
   private logger: TradingLogger;
@@ -71,14 +71,15 @@ export class DirectAlpacaService implements ITradingService {
 
       const data = await response.json();
       
-      return data.map((pos: any) => ({
-        symbol: pos.symbol,
-        quantity: parseFloat(pos.qty),
-        market_value: parseFloat(pos.market_value),
-        unrealized_pl: parseFloat(pos.unrealized_pl),
-        side: pos.side,
-        avg_entry_price: parseFloat(pos.avg_entry_price),
-        current_price: parseFloat(pos.current_price)
+      return data.map((pos: Record<string, unknown>) => ({
+        symbol: pos.symbol as string,
+        qty: parseFloat(pos.qty as string),
+        side: (pos.side as string) === 'long' ? 'long' : 'short',
+        market_value: parseFloat(pos.market_value as string),
+        cost_basis: parseFloat(pos.cost_basis as string),
+        unrealized_pl: parseFloat(pos.unrealized_pl as string),
+        unrealized_plpc: parseFloat(pos.unrealized_plpc as string),
+        current_price: parseFloat(pos.current_price as string)
       }));
     } catch (error) {
       this.logger.log('ALERT', `Failed to get positions: ${error}`);
@@ -104,17 +105,17 @@ export class DirectAlpacaService implements ITradingService {
 
       const data = await response.json();
       
-      return data.map((order: any) => ({
-        id: order.id,
-        symbol: order.symbol,
-        side: order.side,
-        type: order.type,
-        quantity: parseFloat(order.qty),
-        filled_quantity: parseFloat(order.filled_qty),
-        status: order.status,
-        created_at: order.created_at,
-        filled_at: order.filled_at,
-        filled_avg_price: order.filled_avg_price ? parseFloat(order.filled_avg_price) : null
+      return data.map((order: Record<string, unknown>) => ({
+        id: order.id as string,
+        symbol: order.symbol as string,
+        side: (order.side as string) === 'buy' ? 'buy' : 'sell',
+        order_type: (order.type as string) as 'market' | 'limit' | 'stop' | 'stop_limit',
+        qty: parseFloat(order.qty as string),
+        filled_qty: parseFloat(order.filled_qty as string),
+        status: (order.status as string) as 'new' | 'partially_filled' | 'filled' | 'canceled' | 'rejected',
+        time_in_force: 'day' as const,
+        created_at: order.created_at as string,
+        updated_at: order.updated_at as string
       }));
     } catch (error) {
       this.logger.log('ALERT', `Failed to get orders: ${error}`);
@@ -230,7 +231,7 @@ export class DirectAlpacaService implements ITradingService {
   /**
    * Execute trades from trade plan
    */
-  async executeTrades(tradePlan: any, agentState?: any): Promise<ExecutedTrade[]> {
+  async executeTrades(tradePlan: TradePlan, agentState?: AgentState): Promise<ExecutedTrade[]> {
     const executedTrades: ExecutedTrade[] = [];
     
     for (const trade of tradePlan.trades) {
@@ -249,8 +250,9 @@ export class DirectAlpacaService implements ITradingService {
   /**
    * Set stop loss and take profit (not implemented for direct API)
    */
-  async setStopLossAndTakeProfit(trade: any, orderId: string): Promise<void> {
+  setStopLossAndTakeProfit(trade: TradeDecision, orderId: string): Promise<void> {
     this.logger.log('STATUS', `Stop loss and take profit not implemented for direct API`);
+    return Promise.resolve();
   }
 
   /**
@@ -271,12 +273,81 @@ export class DirectAlpacaService implements ITradingService {
     }
   }
 
-  // MCP compatibility methods (no-op for direct API)
-  setAlpacaClient(client: any): void {
+  // Additional methods for compatibility
+  setAlpacaClient(client: Record<string, unknown>): void {
     // Not used in direct API mode
   }
 
-  updateClient(client: any): void {
+  updateClient(client: Record<string, unknown>): void {
     // Not used in direct API mode
   }
-} 
+
+  async cancelOrder(orderId: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v2/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: {
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Alpaca API error: ${response.status} ${response.statusText}`);
+      }
+
+      this.logger.log('TRADE', `Cancelled order ${orderId}`);
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to cancel order ${orderId}: ${error}`);
+      throw error;
+    }
+  }
+
+  async getOrderStatus(orderId: string): Promise<Record<string, unknown>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v2/orders/${orderId}`, {
+        headers: {
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Alpaca API error: ${response.status} ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to get order status for ${orderId}: ${error}`);
+      throw error;
+    }
+  }
+
+  async getMarketData(symbol: string): Promise<Record<string, unknown>> {
+    try {
+      const response = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`, {
+        headers: {
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Alpaca API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.quotes[symbol] || {};
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to get market data for ${symbol}: ${error}`);
+      return {};
+    }
+  }
+
+  async waitForMarketOpen(): Promise<void> {
+    this.logger.log('STATUS', 'Market open check not implemented for direct API');
+    return Promise.resolve();
+  }
+
+  // Note: cancelAllOrders is already implemented above
+}

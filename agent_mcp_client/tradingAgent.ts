@@ -34,6 +34,7 @@ import { DirectAlpacaService } from './services/directAlpacaService.ts';
 import { EmailService } from './services/emailService.ts';
 import { DatabaseService } from './services/databaseService.ts';
 import { AIService } from './services/aiService.ts';
+import { ITradingService } from './types/interfaces.ts';
 
 // Import utilities
 import { Logger } from './utils/logger.ts';
@@ -50,7 +51,7 @@ export class AutonomousTradingAgent {
   // Services
   private logger!: Logger;
   private marketDataService!: MarketDataService;
-  private tradingService!: TradingService;
+  private tradingService!: ITradingService;
   private emailService!: EmailService;
   private databaseService!: DatabaseService;
   private aiService!: AIService;
