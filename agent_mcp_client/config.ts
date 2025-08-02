@@ -10,7 +10,7 @@ export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> 
   const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
   
   if (isRailway) {
-    console.log("🚂 Running in Railway environment - using direct API calls");
+    // Railway environment detected - using direct API calls
     // In Railway, we'll use direct API calls instead of MCP servers
     // This is more reliable and cost-effective
     return {};
@@ -60,7 +60,7 @@ export const MCP_SERVERS: Record<string, MCPServerConfig> = (() => {
   const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
   
   if (isRailway) {
-    console.log("🚂 Running in Railway environment - disabling MCP servers");
+    // Railway environment detected - disabling MCP servers
     return {} as Record<string, MCPServerConfig>; // Return empty object to disable MCP servers
   }
   
