@@ -30,6 +30,7 @@ import {
 // Import services
 import { MarketDataService } from './services/marketDataService.ts';
 import { TradingService } from './services/tradingService.ts';
+import { DirectAlpacaService } from './services/directAlpacaService.ts';
 import { EmailService } from './services/emailService.ts';
 import { DatabaseService } from './services/databaseService.ts';
 import { AIService } from './services/aiService.ts';
@@ -103,7 +104,17 @@ export class AutonomousTradingAgent {
   private initializeServices(): void {
     // Initialize services with null clients initially
     this.marketDataService = new MarketDataService(null, this.logger);
-    this.tradingService = new TradingService(null, this.logger);
+    
+    // Use DirectAlpacaService in Railway environment
+    const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
+    if (isRailway) {
+      this.tradingService = new DirectAlpacaService(this.logger);
+      this.logger.log('STATUS', '🚂 Using DirectAlpacaService for Railway deployment');
+    } else {
+      this.tradingService = new TradingService(null, this.logger);
+      this.logger.log('STATUS', '🏠 Using TradingService for local development');
+    }
+    
     this.emailService = new EmailService(this.logger, Deno.env.get("BASE_URL") || 'http://localhost:8080');
     this.databaseService = new DatabaseService(null, this.logger);
     this.aiService = new AIService(this.logger);
