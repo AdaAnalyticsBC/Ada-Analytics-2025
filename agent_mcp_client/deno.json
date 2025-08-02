@@ -2,18 +2,18 @@
   "name": "autonomous-trading-agent",
   "version": "1.0.0",
   "description": "Autonomous AI-powered trading agent with MCP integration using Deno",
-  "exports": "./main.ts",
+  "exports": "./main_new.ts",
   "tasks": {
-    "dev": "deno run --allow-all --watch main.ts",
-    "start": "deno run --allow-all main.ts",
-    "prod": "deno run --allow-all --no-check --quiet main.ts",
+    "dev": "deno run --allow-all --watch main_new.ts",
+    "start": "deno run --allow-all main_new.ts",
+    "prod": "deno run --allow-all --no-check --quiet main_new.ts",
     "test": "deno test --allow-all --no-check main_test.ts",
     "test:watch": "deno test --allow-all --no-check --watch main_test.ts",
     "test:verbose": "./test.sh",
     "fmt": "deno fmt",
     "lint": "deno lint",
-    "check": "deno check main.ts",
-    "cache": "deno cache main.ts",
+    "check": "deno check main_new.ts",
+    "cache": "deno cache main_new.ts",
     "deploy:railway": "./deploy-railway.sh",
     "deploy:deno": "./deploy-deno.sh",
     "control": "deno run --allow-net --allow-read --allow-env --allow-run control.ts",
@@ -29,7 +29,7 @@
   },
   "fmt": {
     "files": {
-      "include": ["main.ts", "*.ts", "*.js"],
+      "include": ["main_new.ts", "*.ts", "*.js"],
       "exclude": ["node_modules/"]
     },
     "options": {
@@ -42,7 +42,7 @@
   },
   "lint": {
     "files": {
-      "include": ["main.ts", "*.ts"],
+      "include": ["main_new.ts", "*.ts"],
       "exclude": ["node_modules/"]
     },
     "rules": {
@@ -84,7 +84,12 @@
       "ALPACA_API_KEY",
       "ALPACA_SECRET_KEY",
       "SUPABASE_ACCESS_TOKEN",
-      "QUIVER_API_TOKEN"
+      "QUIVER_API_TOKEN",
+      "SUPABASE_URL",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SUPABASE_ANON_KEY",
+      "EMAIL_FROM",
+      "EMAIL_RECIPIENTS"
     ],
     "allow-run": [
       "deno",
