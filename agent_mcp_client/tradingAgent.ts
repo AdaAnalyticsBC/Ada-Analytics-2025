@@ -89,11 +89,11 @@ export class AutonomousTradingAgent {
       throw new Error(`Missing required environment variables: ${envValidation.missing.join(', ')}`);
     }
 
-    // Load existing state
-    await this.loadState();
-
-    // Initialize services (without clients initially)
+    // Initialize services first (without clients initially)
     this.initializeServices();
+
+    // Load existing state after services are initialized
+    await this.loadState();
 
     this.logger.log('STATUS', '✅ Agent initialization complete');
   }

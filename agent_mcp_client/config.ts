@@ -34,7 +34,7 @@ export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> 
       env: {
         ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
         ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
-        ALPACA_PAPER_TRADE: "True"
+        ALPACA_PAPER_TRADE: "True"  // Always use paper trading for safety
       }
     },
     supabase: {
@@ -71,7 +71,7 @@ export const MCP_SERVERS: Record<string, MCPServerConfig> = (() => {
       env: {
         ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
         ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
-        ALPACA_PAPER_TRADE: "True"
+        ALPACA_PAPER_TRADE: "True"  // Always use paper trading for safety
       }
     },
     supabase: {

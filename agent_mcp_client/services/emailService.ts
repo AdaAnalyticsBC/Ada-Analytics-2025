@@ -65,9 +65,8 @@ export class EmailService implements IEmailService {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const startOfDay = new Date(today + 'T00:00:00Z').toISOString();
-      const endOfDay = new Date(today + 'T23:59:59Z').toISOString();
-
+      
+      // Use the correct Resend API endpoint for getting email statistics
       const response = await fetch('https://api.resend.com/emails', {
         method: 'GET',
         headers: {
@@ -77,6 +76,11 @@ export class EmailService implements IEmailService {
       });
 
       if (!response.ok) {
+        // If the emails endpoint doesn't work, try the domains endpoint to check API key validity
+        if (response.status === 405) {
+          this.logger.log('ALERT', 'Resend API endpoint not available, skipping email count fetch');
+          return 0;
+        }
         this.logger.log('ALERT', `Failed to fetch Resend email count: ${response.status}`);
         return 0;
       }

@@ -15,10 +15,13 @@ export class DirectAlpacaService implements ITradingService {
     this.logger = logger;
     this.apiKey = Deno.env.get('ALPACA_API_KEY') || '';
     this.secretKey = Deno.env.get('ALPACA_SECRET_KEY') || '';
-    this.paperTrading = Deno.env.get('ALPACA_PAPER_TRADE') === 'True';
+    // Default to paper trading for safety - only use live if explicitly set to false
+    this.paperTrading = Deno.env.get('ALPACA_PAPER_TRADE') !== 'False';
     this.baseUrl = this.paperTrading 
       ? 'https://paper-api.alpaca.markets' 
       : 'https://api.alpaca.markets';
+    
+    this.logger.log('STATUS', `🔒 Using ${this.paperTrading ? 'PAPER' : 'LIVE'} trading mode`);
   }
 
   /**
