@@ -2,7 +2,7 @@
  * Direct Alpaca API Service - Replaces MCP server for Railway deployment
  */
 
-import { ITradingService, TradingLogger, AccountDetails, Position, Order, ExecutedTrade, TradePlan, AgentState, TradeDecision } from '../types/interfaces.ts';
+import { ITradingService, TradingLogger, AccountDetails, Position, Order, ExecutedTrade, TradePlan, AgentState, TradeDecision, AlpacaOrder } from '../types/interfaces.ts';
 
 export class DirectAlpacaService implements ITradingService {
   private logger: TradingLogger;
@@ -304,7 +304,7 @@ export class DirectAlpacaService implements ITradingService {
     }
   }
 
-  async getOrderStatus(orderId: string): Promise<Record<string, unknown> | null> {
+  async getOrderStatus(orderId: string): Promise<AlpacaOrder | null> {
     try {
       const response = await fetch(`${this.baseUrl}/v2/orders/${orderId}`, {
         headers: {
@@ -317,7 +317,33 @@ export class DirectAlpacaService implements ITradingService {
         throw new Error(`Alpaca API error: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      
+      // Convert raw API response to AlpacaOrder
+      return {
+        id: data.id,
+        client_order_id: data.client_order_id,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        submitted_at: data.submitted_at,
+        filled_at: data.filled_at,
+        expired_at: data.expired_at,
+        canceled_at: data.canceled_at,
+        failed_at: data.failed_at,
+        asset_id: data.asset_id,
+        symbol: data.symbol,
+        asset_class: data.asset_class,
+        qty: data.qty,
+        filled_qty: data.filled_qty,
+        type: data.type,
+        side: data.side,
+        time_in_force: data.time_in_force,
+        limit_price: data.limit_price,
+        stop_price: data.stop_price,
+        status: data.status,
+        extended_hours: data.extended_hours,
+        legs: data.legs
+      };
     } catch (error) {
       this.logger.log('ALERT', `Failed to get order status for ${orderId}: ${error}`);
       return null;

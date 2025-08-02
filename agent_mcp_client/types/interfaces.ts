@@ -359,7 +359,7 @@ export interface ITradingService {
   setAlpacaClient(client: unknown): void;
   updateClient(client: unknown): void;
   cancelOrder(orderId: string): Promise<boolean>;
-  getOrderStatus(orderId: string): Promise<Record<string, unknown> | null>;
+  getOrderStatus(orderId: string): Promise<AlpacaOrder | null>;
   getMarketData(symbol: string): Promise<Record<string, unknown>>;
   waitForMarketOpen(): Promise<void>;
   cancelAllOrders(): Promise<void>;
