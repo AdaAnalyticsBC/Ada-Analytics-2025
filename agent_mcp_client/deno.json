@@ -52,7 +52,6 @@
     }
   },
   "lock": false,
-  "nodeModulesDir": "none",
   "imports": {
     "@std/": "https://deno.land/std@0.208.0/",
     "@anthropic/": "npm:@anthropic-ai/sdk@^0.30.0/",
