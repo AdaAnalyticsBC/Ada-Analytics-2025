@@ -2,9 +2,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import process from "node:process";
+import { createServer } from "http";
 
 const QUIVER_API_BASE = "https://api.quiverquant.com/beta";
 const API_TOKEN = process.env.QUIVER_API_TOKEN;
+const PORT = process.env.PORT || 8081;
 
 const server = new McpServer({
   name: "quiver-quant",
@@ -13,6 +15,25 @@ const server = new McpServer({
     resources: {},
     tools: {},
   },
+});
+
+// Simple HTTP health check for Railway
+const httpServer = createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      service: 'quiver-mcp-server'
+    }));
+  } else {
+    res.writeHead(404);
+    res.end('Not found');
+  }
+});
+
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Quiver MCP Server health check listening on port ${PORT}`);
 });
 
 // H E L P E R    F U N C T I O N S

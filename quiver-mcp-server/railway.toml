@@ -1,0 +1,35 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "always"
+restartPolicyMaxRetries = 3
+startCommand = "node main.ts"
+
+[[services]]
+name = "quiver-mcp-server"
+
+[services.source]
+repo = "your-username/ada-analytics"
+rootDirectory = "Ada-Analytics/quiver-mcp-server"
+
+[services.variables]
+NODE_ENV = "production"
+TZ = "America/New_York"
+PORT = "8081"
+
+[services.healthcheck]
+path = "/health"
+interval = 30
+timeout = 10
+retries = 3
+
+[services.resources]
+memory = 256
+cpu = 250
+
+[services.serverless]
+enabled = true 
