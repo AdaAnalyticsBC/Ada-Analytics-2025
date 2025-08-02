@@ -99,6 +99,7 @@ export class AutonomousTradingAgent {
   /**
    * Initialize all services
    */
+  
   private initializeServices(): void {
     // Initialize services with null clients initially
     this.marketDataService = new MarketDataService(null, this.logger);
