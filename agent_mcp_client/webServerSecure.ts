@@ -269,7 +269,7 @@ export class SecureWebServer {
       const state = this.getAgentState();
       
       // For now, just resume trading without token validation
-      // TODO: Implement proper resume token validation
+      // TODO(#feature): Implement proper resume token validation
       await this.updateAgentState({ 
         is_paused: false
       });
