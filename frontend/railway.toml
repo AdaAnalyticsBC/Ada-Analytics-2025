@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "yarn run start"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+
+[build.environment]
+NODE_VERSION = "22" 
