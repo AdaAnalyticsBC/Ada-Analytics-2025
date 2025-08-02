@@ -6,6 +6,14 @@ import { MCPServerConfig, EmailConfig, WebServerConfig } from './types/interface
 
 // Function to get MCP Server Configuration
 export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> {
+  // Check if running in Railway environment
+  const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
+  
+  if (isRailway) {
+    console.log("🚂 Running in Railway environment - disabling MCP servers");
+    return {}; // Return empty object to disable MCP servers
+  }
+  
   let pythonCommand = "python3";
   
   try {
@@ -45,31 +53,41 @@ export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> 
 }
 
 // Legacy export for backward compatibility
-export const MCP_SERVERS: Record<string, MCPServerConfig> = {
-  alpaca: {
-    command: "python3",
-    args: ["../alpaca-mcp-server/alpaca_mcp_server.py"],
-    env: {
-      ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
-      ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
-      ALPACA_PAPER_TRADE: "True"
-    }
-  },
-  supabase: {
-    command: "npx",
-    args: ["-y", "@supabase/mcp-server-supabase", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || ''],
-    env: {
-      SUPABASE_ACCESS_TOKEN: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ACCESS_TOKEN') || ""
-    }
-  },
-  "quiver-quant": {
-    command: "deno",
-    args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
-    env: {
-      QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
-    }
+export const MCP_SERVERS: Record<string, MCPServerConfig> = (() => {
+  // Check if running in Railway environment
+  const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
+  
+  if (isRailway) {
+    console.log("🚂 Running in Railway environment - disabling MCP servers");
+    return {} as Record<string, MCPServerConfig>; // Return empty object to disable MCP servers
   }
-};
+  
+  return {
+    alpaca: {
+      command: "python3",
+      args: ["../alpaca-mcp-server/alpaca_mcp_server.py"],
+      env: {
+        ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
+        ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
+        ALPACA_PAPER_TRADE: "True"
+      }
+    },
+    supabase: {
+      command: "npx",
+      args: ["-y", "@supabase/mcp-server-supabase", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || ''],
+      env: {
+        SUPABASE_ACCESS_TOKEN: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ACCESS_TOKEN') || ""
+      }
+    },
+    "quiver-quant": {
+      command: "deno",
+      args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
+      env: {
+        QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
+      }
+    }
+  };
+})();
 
 // Trading Constants
 export const TRADING_CONFIG = {
