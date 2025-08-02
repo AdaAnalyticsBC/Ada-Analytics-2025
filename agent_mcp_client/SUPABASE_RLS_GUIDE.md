@@ -44,7 +44,7 @@ When RLS (Row Level Security) is enabled in Supabase:
 ### **Setup Steps**
 
 #### **Step 1: Get Your Service Role Key**
-1. Go to [Supabase Dashboard](https://supabase.com/dashboard/project/wcbjlcyecwzwsgfnqncz/settings/api)
+1. Go to [Supabase Dashboard](https://supabase.com/dashboard/project/your_project_ref/settings/api)
 2. Copy the **service_role** key (starts with `eyJ...`)
 3. **Keep it secret!** This key has admin privileges
 

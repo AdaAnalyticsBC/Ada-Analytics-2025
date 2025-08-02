@@ -46,7 +46,7 @@ if [ -f ".env" ]; then
             # Remove quotes
             value=$(echo "$value" | sed 's/^"\(.*\)"$/\1/')
             echo "Setting $key..."
-            railway variables set "$key=$value"
+            railway variables --set "$key=$value"
         fi
     done < .env
 else

@@ -58,7 +58,7 @@ if ! supabase status &> /dev/null; then
     supabase login
 fi
 
-PROJECT_REF="wcbjlcyecwzwsgfnqncz"
+PROJECT_REF="your_supabase_project_ref"
 
 print_info "Disabling RLS for project: $PROJECT_REF"
 

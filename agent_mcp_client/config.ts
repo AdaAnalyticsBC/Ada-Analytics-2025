@@ -87,7 +87,7 @@ export const TRADING_CONFIG = {
 
 // Email Configuration
 export const EMAIL_CONFIG: EmailConfig = {
-  from: Deno.env.get('EMAIL_FROM') || 'alerts@adaanalytics.io',
+  from: Deno.env.get('EMAIL_FROM') || '',
   recipients: Deno.env.get('EMAIL_RECIPIENTS')?.split(',').map(email => email.trim()) || []
 };
 

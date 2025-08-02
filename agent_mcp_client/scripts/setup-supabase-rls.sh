@@ -45,7 +45,7 @@ if ! supabase status &> /dev/null; then
     supabase login
 fi
 
-PROJECT_REF="wcbjlcyecwzwsgfnqncz"
+PROJECT_REF="SUPABASE_PROJECT_REF"
 
 print_info "Setting up RLS policies for project: $PROJECT_REF"
 
