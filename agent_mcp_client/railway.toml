@@ -8,33 +8,3 @@ healthcheckTimeout = 300
 restartPolicyType = "always"
 restartPolicyMaxRetries = 3
 startCommand = "deno run --allow-all --no-check main_new.ts"
-
-[[services]]
-name = "ada-analytics-agent"
-
-[services.source]
-repo = "your-username/ada-analytics"
-rootDirectory = "Ada-Analytics/agent_mcp_client"
-
-[services.variables]
-NODE_ENV = "production"
-TZ = "America/New_York"
-PORT = "8080"
-RAILWAY_ENVIRONMENT = "production"
-# MCP Server URLs (will be set by Railway)
-ALPACA_MCP_URL = "http://alpaca-mcp-service.railway.internal:8000"
-SUPABASE_MCP_URL = "http://supabase-mcp-service.railway.internal:8000"
-QUIVER_MCP_URL = "http://quiver-mcp-service.railway.internal:8000"
-
-[services.healthcheck]
-path = "/api/health"
-interval = 30
-timeout = 10
-retries = 3
-
-[services.resources]
-memory = 512
-cpu = 500
-
-[services.serverless]
-enabled = true
