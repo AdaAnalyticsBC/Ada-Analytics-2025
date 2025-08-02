@@ -5,8 +5,8 @@
   "main": "main.ts",
   "type": "module",
   "scripts": {
-    "start": "node main.ts",
-    "dev": "node --watch main.ts",
+    "start": "deno run --allow-net --allow-env main.ts",
+    "dev": "deno run --allow-net --allow-env --watch main.ts",
     "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
