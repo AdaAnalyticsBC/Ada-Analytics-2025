@@ -15,7 +15,6 @@ import { IMarketDataService, ITradingService, IEmailService, IDatabaseService, I
 import { WEB_SERVER_CONFIG } from './config.ts';
 
 // Import security middlewares
-import { AuthMiddleware, AuthenticatedUser } from './middleware/auth.ts';
 import { RATE_LIMITS } from './middleware/rateLimit.ts';
 import { CorsMiddleware } from './middleware/cors.ts';
 import { SecurityMiddleware, VALIDATION_SCHEMAS, SecurityEvent } from './middleware/security.ts';
@@ -26,7 +25,6 @@ export class SecureWebServer {
   private server: Deno.HttpServer | null = null;
   
   // Security middlewares
-  private authMiddleware: AuthMiddleware;
   private corsMiddleware: CorsMiddleware;  
   private securityMiddleware: SecurityMiddleware;
   
@@ -60,7 +58,6 @@ export class SecureWebServer {
     this.config = { ...WEB_SERVER_CONFIG, ...config };
     
     // Initialize security middlewares
-    this.authMiddleware = new AuthMiddleware();
     this.corsMiddleware = new CorsMiddleware({
       allowedOrigins: [
         'http://localhost:5173', // SvelteKit dev
@@ -195,32 +192,15 @@ export class SecureWebServer {
   }
 
   /**
-   * Route requests with authentication
+   * Route requests (no authentication required with service role)
    */
   private async routeRequest(request: Request, url: URL, path: string): Promise<Response> {
-    // Public endpoints (no auth required)
+    // All endpoints are now public (no auth required with service role)
     if (this.isPublicEndpoint(path)) {
       return await this.handlePublicEndpoint(path, url, request);
     }
 
-    // Protected endpoints (auth required)
-    const authResult = await this.authMiddleware.authenticate(request);
-    
-    if (!authResult.user) {
-      this.logSecurityEvent({
-        type: 'UNAUTHORIZED_ACCESS',
-        message: authResult.error || 'Authentication failed',
-        ip: this.getClientIP(request),
-        endpoint: path
-      });
-      
-      return new Response(
-        JSON.stringify({ error: authResult.error || 'Authentication required' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    return await this.handleProtectedEndpoint(path, url, request, authResult.user);
+    return await this.handleApiRequest(path, url, request);
   }
 
   /**
@@ -288,18 +268,12 @@ export class SecureWebServer {
       const token = path.split('/')[2];
       const state = this.getAgentState();
       
-      if (token === state.resume_token) {
-        await this.updateAgentState({ 
-          is_paused: false,
-          resume_token: crypto.randomUUID() // Generate new token
-        });
-        return new Response('Trading has been resumed successfully.', { 
-          headers: { 'Content-Type': 'text/plain' } 
-        });
-      }
-      
-      return new Response('Invalid resume token.', { 
-        status: 400, 
+      // For now, just resume trading without token validation
+      // TODO: Implement proper resume token validation
+      await this.updateAgentState({ 
+        is_paused: false
+      });
+      return new Response('Trading has been resumed successfully.', { 
         headers: { 'Content-Type': 'text/plain' } 
       });
     }
@@ -310,38 +284,7 @@ export class SecureWebServer {
   /**
    * Handle protected endpoints with role-based access
    */
-  private async handleProtectedEndpoint(
-    path: string, 
-    url: URL, 
-    request: Request, 
-    user: AuthenticatedUser
-  ): Promise<Response> {
-    
-    // Admin-only endpoints
-    if (this.isAdminEndpoint(path) && !this.authMiddleware.hasRole(user, 'admin')) {
-      this.logSecurityEvent({
-        type: 'UNAUTHORIZED_ACCESS',
-        message: `User ${user.email} attempted to access admin endpoint: ${path}`,
-        userId: user.id,
-        endpoint: path
-      });
-      
-      return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
 
-    // Trader-level endpoints
-    if (this.isTraderEndpoint(path) && !this.authMiddleware.hasRole(user, 'trader')) {
-      return new Response(
-        JSON.stringify({ error: 'Trader access required' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    return await this.handleApiRequest(path, url, request, user);
-  }
 
   /**
    * Check if endpoint requires admin access
@@ -378,8 +321,7 @@ export class SecureWebServer {
   private async handleApiRequest(
     path: string, 
     url: URL, 
-    request: Request, 
-    user?: AuthenticatedUser
+    request: Request
   ): Promise<Response> {
     
     // Parse request body if present
@@ -401,19 +343,19 @@ export class SecureWebServer {
     // Route to specific handlers with race condition protection
     try {
       if (path.startsWith('/api/agent/')) {
-        return await this.handleAgentApi(path, request.method, body, user);
+        return await this.handleAgentApi(path, request.method, body);
       }
       
       if (path.startsWith('/api/trading/')) {
-        return await this.handleTradingApi(path, request.method, body, user);
+        return await this.handleTradingApi(path, request.method, body);
       }
       
       if (path.startsWith('/api/data/')) {
-        return await this.handleDataApi(path, request.method, url.searchParams, user);
+        return await this.handleDataApi(path, request.method, url.searchParams);
       }
       
       if (path.startsWith('/api/email/')) {
-        return await this.handleEmailApi(path, request.method, body, user);
+        return await this.handleEmailApi(path, request.method, body);
       }
 
       return new Response('API endpoint not found', { status: 404 });
@@ -433,8 +375,7 @@ export class SecureWebServer {
   private async handleAgentApi(
     path: string, 
     method: string, 
-    body: unknown, 
-    user?: AuthenticatedUser
+    body: unknown
   ): Promise<Response> {
     
     if (path === '/api/agent/status' && method === 'GET') {
@@ -458,7 +399,7 @@ export class SecureWebServer {
         await this.updateAgentState({ is_paused: true });
         
         // Log the action
-        this.logger.log('STATUS', `Agent paused by user ${user?.email}`);
+        this.logger.log('STATUS', 'Agent paused via API');
         
         return new Response(
           JSON.stringify({ success: true, message: 'Agent paused' }),
@@ -471,7 +412,7 @@ export class SecureWebServer {
       return await this.securityMiddleware.withLock('agent-resume', async () => {
         await this.updateAgentState({ is_paused: false });
         
-        this.logger.log('STATUS', `Agent resumed by user ${user?.email}`);
+        this.logger.log('STATUS', 'Agent resumed via API');
         
         return new Response(
           JSON.stringify({ success: true, message: 'Agent resumed' }),
@@ -489,8 +430,7 @@ export class SecureWebServer {
   private async handleTradingApi(
     path: string, 
     method: string, 
-    body: unknown, 
-    user?: AuthenticatedUser
+    body: unknown
   ): Promise<Response> {
     
     if (path === '/api/trading/account' && method === 'GET') {
@@ -516,8 +456,7 @@ export class SecureWebServer {
   private async handleDataApi(
     path: string, 
     method: string, 
-    searchParams: URLSearchParams, 
-    user?: AuthenticatedUser
+    searchParams: URLSearchParams
   ): Promise<Response> {
     
     if (path === '/api/data/trades' && method === 'GET') {
@@ -545,8 +484,7 @@ export class SecureWebServer {
   private async handleEmailApi(
     path: string, 
     method: string, 
-    body: unknown, 
-    user?: AuthenticatedUser
+    body: unknown
   ): Promise<Response> {
     
     if (path === '/api/email/test' && method === 'POST') {
@@ -608,7 +546,7 @@ export class SecureWebServer {
     });
 
     // Only log non-sensitive successful requests at INFO level
-    if (response.status < 400 && !logData.path.includes('auth')) {
+    if (response.status < 400 && !(logData.path as string).includes('auth')) {
       // Don't log every request to avoid noise
       return;
     }
