@@ -136,6 +136,13 @@ export class AutonomousTradingAgent {
     this.logger.log('STATUS', 'Connecting to MCP servers...');
 
     const mcpServers = await getMCPServers();
+    
+    // If no MCP servers are configured (like in Railway), skip connection
+    if (Object.keys(mcpServers).length === 0) {
+      this.logger.log('STATUS', '🚂 No MCP servers configured - running in standalone mode');
+      return;
+    }
+    
     for (const [serverName, config] of Object.entries(mcpServers)) {
       try {
         const transport = new StdioClientTransport({
@@ -165,7 +172,8 @@ export class AutonomousTradingAgent {
       }
     }
 
-    if (this.activeClients.size === 0) {
+    // Only throw error if MCP servers were configured but none connected
+    if (Object.keys(mcpServers).length > 0 && this.activeClients.size === 0) {
       throw new Error('Failed to connect to any MCP servers');
     }
 
