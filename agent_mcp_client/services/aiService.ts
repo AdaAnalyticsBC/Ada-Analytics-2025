@@ -10,6 +10,9 @@ import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
 export class AIService implements IAIService {
   private anthropic: Anthropic;
   private logger: TradingLogger;
+  private dailyRequestCount: number = 0;
+  private dailyCost: number = 0;
+  private lastRequestTime: number = 0;
 
   constructor(logger: TradingLogger) {
     this.logger = logger;
@@ -30,6 +33,9 @@ export class AIService implements IAIService {
   async craftTradePlan(marketData: MarketDataResponse, agentState?: AgentState): Promise<TradePlan> {
     this.logger.log('ANALYSIS', 'Crafting trade plan with Claude...');
 
+    // Check cost limits
+    await this.checkCostLimits();
+
     const prompt = this.buildTradePlanPrompt(marketData, agentState);
 
     try {
@@ -39,6 +45,9 @@ export class AIService implements IAIService {
         temperature: AI_CONFIG.TEMPERATURE,
         messages: [{ role: "user", content: prompt }]
       });
+
+      // Track usage and cost
+      this.trackUsage(response.usage, AI_CONFIG.MAX_TOKENS_TRADE_PLAN);
 
       const tradePlanText = response.content[0].type === 'text' ? response.content[0].text : '';
       
@@ -68,6 +77,9 @@ export class AIService implements IAIService {
   async makePredictions(tradePlan: TradePlan, marketData: MarketDataResponse, agentState?: AgentState): Promise<TradePlan> {
     this.logger.log('ANALYSIS', 'Making predictions and refining trade plan...');
 
+    // Check cost limits
+    await this.checkCostLimits();
+
     const predictionPrompt = this.buildPredictionPrompt(tradePlan, marketData, agentState);
 
     try {
@@ -77,6 +89,9 @@ export class AIService implements IAIService {
         temperature: AI_CONFIG.TEMPERATURE,
         messages: [{ role: "user", content: predictionPrompt }]
       });
+
+      // Track usage and cost
+      this.trackUsage(response.usage, AI_CONFIG.MAX_TOKENS_PREDICTIONS);
 
       const predictionText = response.content[0].type === 'text' ? response.content[0].text : '';
       
@@ -524,5 +539,59 @@ export class AIService implements IAIService {
     - Recent trading symbols: ${safePerformance.symbols_traded.join(', ')}
     - Recent trades: ${JSON.stringify(recentTradesData)}
     `;
+  }
+
+  /**
+   * Check cost limits before making API calls
+   */
+  private async checkCostLimits(): Promise<void> {
+    const now = Date.now();
+    const dayStart = new Date().setHours(0, 0, 0, 0);
+    
+    // Reset daily counters if it's a new day
+    if (now < this.lastRequestTime || now - this.lastRequestTime > 24 * 60 * 60 * 1000) {
+      this.dailyRequestCount = 0;
+      this.dailyCost = 0;
+    }
+    
+    // Check daily request limit
+    if (this.dailyRequestCount >= AI_CONFIG.DAILY_REQUEST_LIMIT) {
+      throw new Error(`Daily request limit reached (${AI_CONFIG.DAILY_REQUEST_LIMIT}). Cost protection enabled.`);
+    }
+    
+    // Check daily cost limit
+    if (this.dailyCost >= AI_CONFIG.MAX_DAILY_COST_USD) {
+      throw new Error(`Daily cost limit reached ($${AI_CONFIG.MAX_DAILY_COST_USD}). Cost protection enabled.`);
+    }
+    
+    // Check request throttling
+    if (now - this.lastRequestTime < AI_CONFIG.MIN_REQUEST_INTERVAL_MS) {
+      const waitTime = AI_CONFIG.MIN_REQUEST_INTERVAL_MS - (now - this.lastRequestTime);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+
+  /**
+   * Track API usage and cost
+   */
+  private trackUsage(usage: { input_tokens: number; output_tokens: number }, maxTokens: number): void {
+    this.dailyRequestCount++;
+    this.lastRequestTime = Date.now();
+    
+    // Calculate cost (Haiku pricing: $0.25/1M tokens)
+    const totalTokens = usage.input_tokens + usage.output_tokens;
+    const cost = (totalTokens / 1000) * AI_CONFIG.COST_PER_1K_TOKENS;
+    this.dailyCost += cost;
+    
+    this.logger.log('STATUS', `API Usage: ${totalTokens} tokens, Cost: $${cost.toFixed(4)}, Daily Total: $${this.dailyCost.toFixed(4)}`);
+    
+    // Log warning if approaching limits
+    if (this.dailyRequestCount >= AI_CONFIG.DAILY_REQUEST_LIMIT * 0.8) {
+      this.logger.log('ALERT', `Approaching daily request limit: ${this.dailyRequestCount}/${AI_CONFIG.DAILY_REQUEST_LIMIT}`);
+    }
+    
+    if (this.dailyCost >= AI_CONFIG.MAX_DAILY_COST_USD * 0.8) {
+      this.logger.log('ALERT', `Approaching daily cost limit: $${this.dailyCost.toFixed(4)}/$${AI_CONFIG.MAX_DAILY_COST_USD}`);
+    }
   }
 }

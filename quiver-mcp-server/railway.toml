@@ -1,13 +1,13 @@
 [build]
 builder = "nixpacks"
-buildCommand = "deno cache main.ts"
 
 [deploy]
+startCommand = "deno run --allow-all main.ts --transport http --host 0.0.0.0 --port 8000"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
-restartPolicyType = "always"
-restartPolicyMaxRetries = 3
-startCommand = "deno run --allow-net --allow-env main.ts"
+
+[env]
+QUIVER_API_TOKEN = ""
 
 [[services]]
 name = "quiver-mcp-server"

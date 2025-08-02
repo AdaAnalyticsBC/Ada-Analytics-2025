@@ -10,8 +10,32 @@ export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> 
   const isRailway = Deno.env.get('RAILWAY_ENVIRONMENT') || Deno.env.get('PORT');
   
   if (isRailway) {
-    console.log("🚂 Running in Railway environment - disabling MCP servers");
-    return {}; // Return empty object to disable MCP servers
+    console.log("🚂 Running in Railway environment - using HTTP MCP servers");
+    // In Railway, we'll use HTTP transport to connect to separate MCP services
+    // These will be deployed as separate Railway services
+    return {
+      alpaca: {
+        command: "python3",
+        args: ["../alpaca-mcp-server/alpaca_mcp_server.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"],
+        env: {
+          ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
+          ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
+          ALPACA_PAPER_TRADE: "True"
+        }
+      },
+      supabase: {
+        command: "npx",
+        args: ["-y", "@supabase/mcp-server-supabase@latest", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || '', "--access-token", Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''],
+        env: {}
+      },
+      "quiver-quant": {
+        command: "deno",
+        args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
+        env: {
+          QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
+        }
+      }
+    };
   }
   
   let pythonCommand = "python3";
@@ -126,15 +150,21 @@ export const DATABASE_CONFIG = {
 
 // AI/Claude Configuration (Cost-optimized for <$8/month)
 export const AI_CONFIG = {
-  MODEL: "claude-3-5-haiku-20241022", // More cost-effective model
-  MAX_TOKENS_TRADE_PLAN: 800,
-  MAX_TOKENS_PREDICTIONS: 600,
-  MAX_TOKENS_PERFORMANCE_ANALYSIS: 400,
-  MAX_TOKENS_ADJUSTMENTS: 500,
-  TEMPERATURE: 0.5,
-  // Daily limits to prevent runaway costs
-  DAILY_REQUEST_LIMIT: 20,
-  MONTHLY_BUDGET_USD: 8
+  MODEL: "claude-3-5-haiku-20241022", // Most cost-effective model ($0.25/1M tokens)
+  MAX_TOKENS_TRADE_PLAN: 600, // Reduced from 800
+  MAX_TOKENS_PREDICTIONS: 400, // Reduced from 600
+  MAX_TOKENS_PERFORMANCE_ANALYSIS: 300, // Reduced from 400
+  MAX_TOKENS_ADJUSTMENTS: 300, // Reduced from 500
+  TEMPERATURE: 0.3, // More deterministic
+  // Strict daily limits to prevent runaway costs
+  DAILY_REQUEST_LIMIT: 15, // Reduced from 20
+  MONTHLY_BUDGET_USD: 8,
+  // Cost tracking
+  COST_PER_1K_TOKENS: 0.00025, // Haiku pricing
+  MAX_DAILY_COST_USD: 0.27, // $8/30 days
+  // Request throttling
+  MIN_REQUEST_INTERVAL_MS: 60000, // 1 minute between requests
+  BATCH_REQUESTS: true // Combine multiple requests when possible
 };
 
 // Web Server Configuration

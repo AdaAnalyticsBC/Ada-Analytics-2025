@@ -1,8 +1,8 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@modelcontextprotocol/sdk@^1.17.0": "1.17.0_express@5.1.0_zod@3.25.76",
-    "npm:zod@^3.25.76": "3.25.76"
+    "npm:@modelcontextprotocol/sdk@1": "1.17.0_express@5.1.0_zod@3.25.76",
+    "npm:zod@^3.22.0": "3.25.76"
   },
   "npm": {
     "@modelcontextprotocol/sdk@1.17.0_express@5.1.0_zod@3.25.76": {
@@ -500,9 +500,8 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@1",
-      "npm:@modelcontextprotocol/sdk@^1.17.0",
-      "npm:zod@^3.25.76"
+      "npm:@modelcontextprotocol/sdk@1",
+      "npm:zod@^3.22.0"
     ]
   }
 }

@@ -21,6 +21,10 @@ NODE_ENV = "production"
 TZ = "America/New_York"
 PORT = "8080"
 RAILWAY_ENVIRONMENT = "production"
+# MCP Server URLs (will be set by Railway)
+ALPACA_MCP_URL = "http://alpaca-mcp-service.railway.internal:8000"
+SUPABASE_MCP_URL = "http://supabase-mcp-service.railway.internal:8000"
+QUIVER_MCP_URL = "http://quiver-mcp-service.railway.internal:8000"
 
 [services.healthcheck]
 path = "/api/health"
