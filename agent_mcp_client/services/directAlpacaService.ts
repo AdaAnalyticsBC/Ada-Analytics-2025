@@ -26,10 +26,10 @@ export class DirectAlpacaService implements ITradingService {
    */
   async getAccountDetails(): Promise<AccountDetails> {
     try {
-      const response = await fetch(`${this.baseUrl}/v2/account`, {
+            const response = await fetch(`${this.baseUrl}/v2/account`, {
         headers: {
-            'ALPACA_API_KEY': this.apiKey,
-            'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
         }
       });
 
@@ -58,10 +58,10 @@ export class DirectAlpacaService implements ITradingService {
    */
   async getCurrentPositions(): Promise<Position[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v2/positions`, {
+            const response = await fetch(`${this.baseUrl}/v2/positions`, {
         headers: {
-            'ALPACA_API_KEY': this.apiKey,
-            'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
         }
       });
 
@@ -92,10 +92,10 @@ export class DirectAlpacaService implements ITradingService {
    */
   async getPendingOrders(): Promise<Order[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/v2/orders?status=open`, {
+            const response = await fetch(`${this.baseUrl}/v2/orders?status=open`, {
         headers: {
-            'ALPACA_API_KEY': this.apiKey,
-            'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
         }
       });
 
@@ -139,8 +139,8 @@ export class DirectAlpacaService implements ITradingService {
       const response = await fetch(`${this.baseUrl}/v2/orders`, {
         method: 'POST',
         headers: {
-          'ALPACA_API_KEY': this.apiKey,
-          'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(orderData)
@@ -188,8 +188,8 @@ export class DirectAlpacaService implements ITradingService {
       const response = await fetch(`${this.baseUrl}/v2/orders`, {
         method: 'DELETE',
         headers: {
-          'ALPACA_API_KEY': this.apiKey,
-          'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
         }
       });
 
@@ -212,8 +212,8 @@ export class DirectAlpacaService implements ITradingService {
     try {
       const response = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`, {
         headers: {
-          'ALPACA_API_KEY': this.apiKey,
-          'ALPACA_SECRET_KEY': this.secretKey,
+          'APCA-API-KEY-ID': this.apiKey,
+          'APCA-API-SECRET-KEY': this.secretKey,
         }
       });
 
