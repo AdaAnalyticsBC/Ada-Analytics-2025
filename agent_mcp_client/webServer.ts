@@ -18,6 +18,7 @@ export class WebServer {
   private logger: TradingLogger;
   private config: WebServerConfig;
   private server: Deno.HttpServer | null = null;
+  private startupTime: number;
   
   // Service dependencies
   private marketDataService: IMarketDataService;
@@ -55,6 +56,7 @@ export class WebServer {
   ) {
     this.logger = logger;
     this.config = { ...WEB_SERVER_CONFIG, ...config };
+    this.startupTime = Date.now();
     
     this.marketDataService = services.marketDataService;
     this.tradingService = services.tradingService;
@@ -145,16 +147,16 @@ export class WebServer {
     switch (endpoint) {
       case 'health': {
         const agentState = this.getAgentState();
-        const health = await this.getDetailedHealthStatus();
+        
+        // Simple health check that doesn't depend on external services
         return this.createJsonResponse({
-          status: health.overall_status,
+          status: 'healthy',
           is_paused: agentState.is_paused,
           last_run: agentState.last_run,
           account_balance: agentState.account_balance,
           timestamp: new Date().toISOString(),
-          services: health.services,
-          uptime: health.uptime,
-          version: "2.0.0-modular"
+          version: "2.0.0-modular",
+          uptime: Math.floor((Date.now() - this.startupTime) / 1000)
         });
       }
 
