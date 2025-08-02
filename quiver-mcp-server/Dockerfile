@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy application code first
 COPY . .
 
-# Cache dependencies (without lockfile)
-RUN deno cache --reload main.ts
+# Remove old lockfile if it exists and cache dependencies
+RUN rm -f deno.lock && deno cache main.ts
 
 # Expose port for HTTP transport
 EXPOSE 8000

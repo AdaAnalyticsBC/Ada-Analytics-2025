@@ -42,5 +42,9 @@
 	"dependencies": {
 		"lucide-svelte": "^0.536.0",
 		"svelte-motion": "^0.12.2"
+	},
+	"overrides": {
+		"@sveltejs/kit": "^2.22.0",
+		"svelte": "^5.0.0"
 	}
 }
