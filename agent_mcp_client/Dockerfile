@@ -10,9 +10,7 @@ COPY . .
 # Cache dependencies
 RUN deno cache main_new.ts
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S deno && \
-    adduser -S deno -u 1001
+# Switch to deno user (already exists in the image)
 USER deno
 
 # Health check
