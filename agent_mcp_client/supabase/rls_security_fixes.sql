@@ -74,10 +74,53 @@ ORDER BY created_at DESC
 LIMIT 50;
 
 -- =====================================================
--- 2. FIX ROLE MUTABLE SEARCH_PATH FUNCTIONS
+-- 2. DROP ALL RLS POLICIES FIRST (to handle dependencies)
 -- =====================================================
 
--- Drop existing functions with mutable search_path
+-- Drop all existing policies to avoid function dependency issues
+DROP POLICY IF EXISTS "user_profiles_select_policy" ON user_profiles;
+DROP POLICY IF EXISTS "user_profiles_insert_policy" ON user_profiles;
+DROP POLICY IF EXISTS "user_profiles_update_policy" ON user_profiles;
+DROP POLICY IF EXISTS "user_profiles_delete_policy" ON user_profiles;
+
+DROP POLICY IF EXISTS "trades_select_policy" ON trades;
+DROP POLICY IF EXISTS "trades_insert_policy" ON trades;
+DROP POLICY IF EXISTS "trades_update_policy" ON trades;
+DROP POLICY IF EXISTS "trades_delete_policy" ON trades;
+
+DROP POLICY IF EXISTS "trade_plans_select_policy" ON trade_plans;
+DROP POLICY IF EXISTS "trade_plans_insert_policy" ON trade_plans;
+DROP POLICY IF EXISTS "trade_plans_update_policy" ON trade_plans;
+DROP POLICY IF EXISTS "trade_plans_delete_policy" ON trade_plans;
+
+DROP POLICY IF EXISTS "predictions_select_policy" ON predictions;
+DROP POLICY IF EXISTS "predictions_insert_policy" ON predictions;
+DROP POLICY IF EXISTS "predictions_update_policy" ON predictions;
+DROP POLICY IF EXISTS "predictions_delete_policy" ON predictions;
+
+DROP POLICY IF EXISTS "agent_logs_select_policy" ON agent_logs;
+DROP POLICY IF EXISTS "agent_logs_insert_policy" ON agent_logs;
+
+DROP POLICY IF EXISTS "security_events_select_policy" ON security_events;
+DROP POLICY IF EXISTS "security_events_insert_policy" ON security_events;
+
+DROP POLICY IF EXISTS "market_data_select_policy" ON market_data_snapshots;
+DROP POLICY IF EXISTS "market_data_insert_policy" ON market_data_snapshots;
+DROP POLICY IF EXISTS "market_data_update_policy" ON market_data_snapshots;
+
+DROP POLICY IF EXISTS "performance_metrics_select_policy" ON performance_metrics;
+DROP POLICY IF EXISTS "performance_metrics_insert_policy" ON performance_metrics;
+DROP POLICY IF EXISTS "performance_metrics_update_policy" ON performance_metrics;
+
+DROP POLICY IF EXISTS "api_usage_select_policy" ON api_usage_tracking;
+DROP POLICY IF EXISTS "api_usage_insert_policy" ON api_usage_tracking;
+DROP POLICY IF EXISTS "api_usage_update_policy" ON api_usage_tracking;
+
+-- =====================================================
+-- 3. FIX ROLE MUTABLE SEARCH_PATH FUNCTIONS
+-- =====================================================
+
+-- Now we can safely drop and recreate functions
 DROP FUNCTION IF EXISTS is_admin(UUID);
 DROP FUNCTION IF EXISTS is_trader_or_admin(UUID);
 DROP FUNCTION IF EXISTS get_user_role();
@@ -158,47 +201,8 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog;
 
 -- =====================================================
--- 3. IMPROVE RLS POLICIES FOR BETTER SECURITY
+-- 4. RECREATE ENHANCED RLS POLICIES
 -- =====================================================
-
--- Drop existing policies to recreate them with better security
-DROP POLICY IF EXISTS "user_profiles_select_policy" ON user_profiles;
-DROP POLICY IF EXISTS "user_profiles_insert_policy" ON user_profiles;
-DROP POLICY IF EXISTS "user_profiles_update_policy" ON user_profiles;
-DROP POLICY IF EXISTS "user_profiles_delete_policy" ON user_profiles;
-
-DROP POLICY IF EXISTS "trades_select_policy" ON trades;
-DROP POLICY IF EXISTS "trades_insert_policy" ON trades;
-DROP POLICY IF EXISTS "trades_update_policy" ON trades;
-DROP POLICY IF EXISTS "trades_delete_policy" ON trades;
-
-DROP POLICY IF EXISTS "trade_plans_select_policy" ON trade_plans;
-DROP POLICY IF EXISTS "trade_plans_insert_policy" ON trade_plans;
-DROP POLICY IF EXISTS "trade_plans_update_policy" ON trade_plans;
-DROP POLICY IF EXISTS "trade_plans_delete_policy" ON trade_plans;
-
-DROP POLICY IF EXISTS "predictions_select_policy" ON predictions;
-DROP POLICY IF EXISTS "predictions_insert_policy" ON predictions;
-DROP POLICY IF EXISTS "predictions_update_policy" ON predictions;
-DROP POLICY IF EXISTS "predictions_delete_policy" ON predictions;
-
-DROP POLICY IF EXISTS "agent_logs_select_policy" ON agent_logs;
-DROP POLICY IF EXISTS "agent_logs_insert_policy" ON agent_logs;
-
-DROP POLICY IF EXISTS "security_events_select_policy" ON security_events;
-DROP POLICY IF EXISTS "security_events_insert_policy" ON security_events;
-
-DROP POLICY IF EXISTS "market_data_select_policy" ON market_data_snapshots;
-DROP POLICY IF EXISTS "market_data_insert_policy" ON market_data_snapshots;
-DROP POLICY IF EXISTS "market_data_update_policy" ON market_data_snapshots;
-
-DROP POLICY IF EXISTS "performance_metrics_select_policy" ON performance_metrics;
-DROP POLICY IF EXISTS "performance_metrics_insert_policy" ON performance_metrics;
-DROP POLICY IF EXISTS "performance_metrics_update_policy" ON performance_metrics;
-
-DROP POLICY IF EXISTS "api_usage_select_policy" ON api_usage_tracking;
-DROP POLICY IF EXISTS "api_usage_insert_policy" ON api_usage_tracking;
-DROP POLICY IF EXISTS "api_usage_update_policy" ON api_usage_tracking;
 
 -- =====================================================
 -- ENHANCED RLS POLICIES - USER PROFILES
