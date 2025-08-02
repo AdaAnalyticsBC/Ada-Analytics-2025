@@ -457,12 +457,15 @@ export class AutonomousTradingAgent {
       // Start web server
       await this.webServer.start();
       
-      // Send startup notification
-      if (this.emailService.isConfigured()) {
+      // Send startup notification (only if not in development mode)
+      const isDevelopment = Deno.env.get('NODE_ENV') === 'development' || !Deno.env.get('RAILWAY_ENVIRONMENT');
+      if (this.emailService.isConfigured() && !isDevelopment) {
         await this.emailService.sendStartupNotification(
           this.state.account_balance,
           Array.from(this.activeClients.keys())
         );
+      } else if (isDevelopment) {
+        this.logger.log('STATUS', '📧 Skipping startup email (development mode)');
       }
       
       // Setup periodic state sync (every 5 minutes)
@@ -547,8 +550,9 @@ export class AutonomousTradingAgent {
         }
       }
 
-      // 8. Send shutdown notification
-      if (this.emailService.isConfigured()) {
+      // 8. Send shutdown notification (only if not in development mode)
+      const isDevelopment = Deno.env.get('NODE_ENV') === 'development' || !Deno.env.get('RAILWAY_ENVIRONMENT');
+      if (this.emailService.isConfigured() && !isDevelopment) {
         try {
           await this.emailService.sendShutdownNotification(
             reason,
@@ -558,6 +562,8 @@ export class AutonomousTradingAgent {
         } catch (error) {
           this.logger.log('ALERT', `Failed to send shutdown email: ${error}`);
         }
+      } else if (isDevelopment) {
+        this.logger.log('STATUS', '📧 Skipping shutdown email (development mode)');
       }
 
       this.logger.log('STATUS', '✅ Graceful shutdown completed');

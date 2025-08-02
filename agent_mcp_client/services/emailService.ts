@@ -30,6 +30,11 @@ export class EmailService implements IEmailService {
    * Check if email is properly configured
    */
   isConfigured(): boolean {
+    // Check if emails are disabled via environment variable
+    const emailsDisabled = Deno.env.get('DISABLE_EMAILS') === 'true';
+    if (emailsDisabled) {
+      return false;
+    }
     return isEmailConfigured() && this.resend !== null;
   }
 
@@ -66,7 +71,8 @@ export class EmailService implements IEmailService {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Use the correct Resend API endpoint for getting email statistics
+      // Try the correct Resend API endpoint for getting email statistics
+      // According to Resend docs, we need to use the correct endpoint
       const response = await fetch('https://api.resend.com/emails', {
         method: 'GET',
         headers: {
@@ -76,13 +82,13 @@ export class EmailService implements IEmailService {
       });
 
       if (!response.ok) {
-        // If the emails endpoint doesn't work, try the domains endpoint to check API key validity
-        if (response.status === 405) {
-          this.logger.log('ALERT', 'Resend API endpoint not available, skipping email count fetch');
-          return 0;
+        // The emails endpoint might not be available in all plans
+        if (response.status === 405 || response.status === 404) {
+          this.logger.log('ALERT', 'Resend API emails endpoint not available in current plan, using local counter');
+          return this.dailyEmailCount; // Fall back to local counter
         }
         this.logger.log('ALERT', `Failed to fetch Resend email count: ${response.status}`);
-        return 0;
+        return this.dailyEmailCount; // Fall back to local counter
       }
 
       const data = await response.json();
@@ -100,7 +106,7 @@ export class EmailService implements IEmailService {
       
     } catch (error) {
       this.logger.log('ALERT', `Error fetching Resend email count: ${error}`);
-      return 0;
+      return this.dailyEmailCount; // Fall back to local counter
     }
   }
 
