@@ -426,4 +426,11 @@ export class MarketDataService implements IMarketDataService {
       return [];
     }
   }
+
+  /**
+   * Update client connection (for stopping/starting services)
+   */
+  updateClient(client: Client | null): void {
+    this.quiverClient = client;
+  }
 }

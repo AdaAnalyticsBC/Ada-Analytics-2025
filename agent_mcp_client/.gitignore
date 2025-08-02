@@ -1,0 +1,48 @@
+# Environment variables (NEVER COMMIT THESE!)
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+**/.env
+**/.env.*
+
+# Logs
+*.log
+trading_agent.log
+
+# Agent state (but keep structure)
+# agent_state.json
+
+# Deno cache
+.deno/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (if any npm tools are used)
+node_modules/
+
+# Railway deployment
+.railway/
+
+# Build artifacts
+dist/
+build/

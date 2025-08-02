@@ -271,7 +271,7 @@ export class AIService implements IAIService {
 
     try {
       const response = await this.anthropic.messages.create({
-        model: "claude-3-sonnet-20240229",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 100,
         messages: [{
           role: "user",
@@ -299,11 +299,14 @@ export class AIService implements IAIService {
   // Private helper methods
 
   private buildTradePlanPrompt(marketData: MarketDataResponse, agentState?: AgentState): string {
+    // Extract only key market data to reduce prompt size
+    const keyMarketData = this.extractKeyMarketData(marketData);
+    
     return `
     You are an expert quantitative trader. Based on the following market data and historical performance, create a comprehensive trade plan for today.
 
-    MARKET DATA:
-    ${JSON.stringify(marketData, null, 2)}
+    MARKET DATA SUMMARY:
+    ${keyMarketData}
 
     TRADING RULES:
     - Maximum 2 trades per day
@@ -338,14 +341,17 @@ export class AIService implements IAIService {
   }
 
   private buildPredictionPrompt(tradePlan: TradePlan, marketData: MarketDataResponse, agentState?: AgentState): string {
+    // Extract only key market data to reduce prompt size
+    const keyMarketData = this.extractKeyMarketData(marketData);
+    
     return `
     Based on the initial trade plan and market data, create specific trade predictions:
 
     INITIAL PLAN:
     ${tradePlan.market_analysis}
 
-    MARKET DATA:
-    ${JSON.stringify(marketData, null, 2)}
+    MARKET DATA SUMMARY:
+    ${keyMarketData}
 
     Please provide specific trade decisions in this JSON format:
     {
@@ -446,6 +452,47 @@ export class AIService implements IAIService {
     } catch (error) {
       this.logger.log('ALERT', `Failed to parse JSON from AI response: ${error}`);
       return {};
+    }
+  }
+
+  /**
+   * Extract key market data to reduce prompt size while maintaining essential information
+   */
+  private extractKeyMarketData(marketData: MarketDataResponse): string {
+    try {
+      const summary = [];
+      
+      // Add market overview if available
+      if (marketData.market_overview) {
+        summary.push(`Market Overview: ${JSON.stringify(marketData.market_overview).substring(0, 500)}...`);
+      }
+      
+      // Add key indicators if available
+      if (marketData.indicators) {
+        summary.push(`Key Indicators: ${JSON.stringify(marketData.indicators).substring(0, 300)}...`);
+      }
+      
+      // Add watchlist if available (limit to top 10)
+      if (marketData.watchlist && Array.isArray(marketData.watchlist)) {
+        const topWatchlist = marketData.watchlist.slice(0, 10);
+        summary.push(`Top Watchlist: ${JSON.stringify(topWatchlist)}`);
+      }
+      
+      // Add any other critical data points (limit each to 200 chars)
+      Object.keys(marketData).forEach(key => {
+        if (!['market_overview', 'indicators', 'watchlist', 'trading_performance', 'recent_trades'].includes(key)) {
+          const value = marketData[key];
+          if (value && typeof value === 'object') {
+            summary.push(`${key}: ${JSON.stringify(value).substring(0, 200)}...`);
+          } else if (value) {
+            summary.push(`${key}: ${value}`);
+          }
+        }
+      });
+      
+      return summary.join('\n');
+    } catch (error) {
+      return 'Market data summary unavailable due to formatting error';
     }
   }
 

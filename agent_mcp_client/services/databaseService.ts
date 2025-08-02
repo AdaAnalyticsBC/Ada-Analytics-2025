@@ -570,4 +570,97 @@ export class DatabaseService implements IDatabaseService {
       created_at: String(row.created_at || new Date().toISOString())
     }));
   }
+
+  /**
+   * Update client connection (for stopping/starting services)
+   */
+  updateClient(client: Client | null): void {
+    this.supabaseClient = client;
+  }
+
+  /**
+   * Get monthly usage statistics for cost tracking
+   */
+  async getMonthlyUsage(month: string): Promise<{
+    claude_requests: number;
+    estimated_cost: number;
+    trades_count: number;
+    daily_requests: number;
+  } | null> {
+    if (!this.supabaseClient) {
+      return null;
+    }
+
+    try {
+      const response = await this.supabaseClient.callTool({
+        name: 'select',
+        arguments: {
+          table: 'api_usage_tracking',
+          query: `usage_month=eq.${month}`,
+          columns: 'service_name,request_count,estimated_cost_usd'
+        }
+      }) as MCPResponse;
+
+      if (response && 'data' in response) {
+        const usageData = Array.isArray(response.data) ? response.data : [];
+        
+        const claudeUsage = usageData.find((row: Record<string, unknown>) => row.service_name === 'claude');
+        const tradesThisMonth = await this.getHistoricalTrades(30);
+        
+        return {
+          claude_requests: Number(claudeUsage?.request_count || 0),
+          estimated_cost: Number(claudeUsage?.estimated_cost_usd || 0),
+          trades_count: tradesThisMonth.length,
+          daily_requests: Math.floor(Number(claudeUsage?.request_count || 0) / 30) // Rough estimate
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to get monthly usage: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Track API usage for cost monitoring
+   */
+  async trackApiUsage(service: 'claude' | 'alpaca' | 'quiver', requestCount: number, tokensUsed: number, estimatedCost: number): Promise<void> {
+    if (!this.supabaseClient) {
+      return;
+    }
+
+    try {
+      const today = new Date();
+      const usageDate = today.toISOString().split('T')[0];
+      const usageMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+      await this.supabaseClient.callTool({
+        name: 'upsert',
+        arguments: {
+          table: 'api_usage_tracking',
+          data: {
+            usage_date: usageDate,
+            usage_month: usageMonth,
+            service_name: service,
+            request_count: requestCount,
+            tokens_used: tokensUsed,
+            estimated_cost_usd: estimatedCost,
+            request_details: {
+              timestamp: new Date().toISOString(),
+              tokens_per_request: Math.floor(tokensUsed / requestCount)
+            }
+          },
+          options: {
+            onConflict: 'usage_date,service_name',
+            ignoreDuplicates: false
+          }
+        }
+      });
+
+      this.logger.log('STATUS', `📊 Tracked ${service} API usage: ${requestCount} requests, $${estimatedCost.toFixed(4)}`);
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to track API usage: ${error}`);
+    }
+  }
 }

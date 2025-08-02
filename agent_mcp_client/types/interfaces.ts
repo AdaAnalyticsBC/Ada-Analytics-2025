@@ -379,6 +379,13 @@ export interface IDatabaseService {
   getTodayTrades(): Promise<TradeRecord[]>;
   getYesterdayTrades(): Promise<TradeRecord[]>;
   storeAgentEvent(eventType: string, reason: string, context?: Record<string, unknown>): Promise<void>;
+  getMonthlyUsage(month: string): Promise<{
+    claude_requests: number;
+    estimated_cost: number;
+    trades_count: number;
+    daily_requests: number;
+  } | null>;
+  trackApiUsage(service: 'claude' | 'alpaca' | 'quiver', requestCount: number, tokensUsed: number, estimatedCost: number): Promise<void>;
 }
 
 export interface IAIService {

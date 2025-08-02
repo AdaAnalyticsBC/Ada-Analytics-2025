@@ -690,4 +690,11 @@ export class TradingService implements ITradingService {
         return 'rejected';
     }
   }
+
+  /**
+   * Update client connection (for stopping/starting services)
+   */
+  updateClient(client: Client | null): void {
+    this.alpacaClient = client;
+  }
 }

@@ -201,7 +201,7 @@ server.tool(
       params.insider = insider;
     }
 
-    const insiderData = await makeQuiverRequest<InsiderTrade[]>("/live/insidertrading", params);
+    const insiderData = await makeQuiverRequest<InsiderTrade[]>("/live/insiders", params);
 
     if (!insiderData) {
       return {

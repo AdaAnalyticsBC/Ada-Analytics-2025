@@ -19,7 +19,7 @@ import {
 
 // Import configuration
 import { 
-  MCP_SERVERS, 
+  getMCPServers, 
   CRON_SCHEDULES, 
   FILE_PATHS, 
   DEFAULT_AGENT_STATE,
@@ -120,6 +120,10 @@ export class AutonomousTradingAgent {
       {
         getAgentState: () => this.state,
         updateAgentState: (updates) => this.updateAgentState(updates)
+      },
+      {
+        stopAllMCPServers: () => this.stopAllMCPServers(),
+        startAllMCPServers: () => this.connectToServers()
       }
     );
   }
@@ -130,7 +134,8 @@ export class AutonomousTradingAgent {
   async connectToServers(): Promise<void> {
     this.logger.log('STATUS', 'Connecting to MCP servers...');
 
-    for (const [serverName, config] of Object.entries(MCP_SERVERS)) {
+    const mcpServers = await getMCPServers();
+    for (const [serverName, config] of Object.entries(mcpServers)) {
       try {
         const transport = new StdioClientTransport({
           command: config.command,
@@ -163,7 +168,7 @@ export class AutonomousTradingAgent {
       throw new Error('Failed to connect to any MCP servers');
     }
 
-    this.logger.log('STATUS', `Connected to ${this.activeClients.size}/${Object.keys(MCP_SERVERS).length} MCP servers`);
+    this.logger.log('STATUS', `Connected to ${this.activeClients.size}/${Object.keys(mcpServers).length} MCP servers`);
   }
 
   /**
@@ -184,6 +189,47 @@ export class AutonomousTradingAgent {
   }
 
   /**
+   * Stop all MCP servers
+   */
+  private async stopAllMCPServers(): Promise<void> {
+    this.logger.log('STATUS', '🛑 Stopping all MCP servers...');
+    
+    for (const [serverName, client] of this.activeClients.entries()) {
+      try {
+        await client.close();
+        this.logger.log('STATUS', `✅ Stopped ${serverName} server`);
+      } catch (error) {
+        this.logger.log('ALERT', `Failed to stop ${serverName}: ${error}`);
+      }
+    }
+    
+    this.activeClients.clear();
+    
+    // Update service clients to null
+    this.marketDataService.updateClient(null);
+    this.tradingService.updateClient(null);  
+    this.databaseService.updateClient(null);
+    
+    this.logger.log('STATUS', '🛑 All MCP servers stopped');
+  }
+
+  /**
+   * Sync account balance with live Alpaca data
+   */
+  private async syncAccountBalance(): Promise<void> {
+    try {
+      const accountDetails = await this.tradingService.getAccountDetails();
+      if (accountDetails.balance && accountDetails.balance !== this.state.account_balance) {
+        this.state.account_balance = accountDetails.balance;
+        await this.saveState();
+        this.logger.log('STATUS', `Account balance synced: $${accountDetails.balance.toLocaleString()}`);
+      }
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to sync account balance: ${error}`);
+    }
+  }
+
+  /**
    * Main trading workflow execution
    */
   async runTradingWorkflow(): Promise<void> {
@@ -194,9 +240,7 @@ export class AutonomousTradingAgent {
 
     try {
       // Trading workflow header
-      console.log('\n' + '─'.repeat(60));
       this.logger.log('STATUS', '🚀 DAILY TRADING WORKFLOW STARTED');
-      console.log('─'.repeat(60));
 
       // Step 1: Collect market data with historical context
       this.logger.log('ANALYSIS', 'Step 1: Collecting market data...');
@@ -247,14 +291,10 @@ export class AutonomousTradingAgent {
       this.state.last_run = new Date().toISOString();
       await this.saveState();
 
-      console.log('─'.repeat(60));
       this.logger.log('STATUS', '✅ TRADING WORKFLOW COMPLETED SUCCESSFULLY');
-      console.log('─'.repeat(60) + '\n');
 
     } catch (error: unknown) {
-      console.log('─'.repeat(60));
       this.logger.log('ALERT', `❌ TRADING WORKFLOW FAILED: ${error}`);
-      console.log('─'.repeat(60) + '\n');
       
       await this.handleWorkflowError(error);
     }
@@ -307,7 +347,7 @@ export class AutonomousTradingAgent {
    */
   async start(): Promise<void> {
     try {
-      console.log('\n🤖 Starting Ada Analytics Trading Agent...\n');
+      this.logger.log('STATUS', '🤖 Starting Ada Analytics Trading Agent...');
       
       // Initialize
       await this.initialize();
@@ -426,7 +466,7 @@ export class AutonomousTradingAgent {
       }
 
       this.logger.log('STATUS', '✅ Graceful shutdown completed');
-      console.log('\n🔒 Agent shutdown complete. Safe to restart.');
+      this.logger.log('STATUS', '🔒 Agent shutdown complete. Safe to restart.');
 
     } catch (error) {
       this.logger.log('ALERT', `❌ Error during shutdown: ${error}`);
@@ -522,6 +562,15 @@ export class AutonomousTradingAgent {
       const stateData = await Deno.readTextFile(FILE_PATHS.AGENT_STATE);
       this.state = { ...this.state, ...JSON.parse(stateData) };
       this.logger.log('STATUS', 'Agent state loaded successfully');
+      
+      // Sync account balance with live data if services are connected
+      if (this.activeClients.has('alpaca') && !this.state.is_paused) {
+        try {
+          await this.syncAccountBalance();
+        } catch (error) {
+          this.logger.log('STATUS', `Could not sync account balance: ${error}`);
+        }
+      }
     } catch (error) {
       this.logger.log('STATUS', 'No existing state found, using defaults');
     }
@@ -530,7 +579,7 @@ export class AutonomousTradingAgent {
   private setupSignalHandlers(): void {
     // Handle SIGINT (Ctrl+C)
     const handleSigInt = () => {
-      console.log('\n⚠️ Received SIGINT (Ctrl+C)...');
+      this.logger.log('ALERT', '⚠️ Received SIGINT (Ctrl+C)...');
       this.gracefulShutdown('SIGINT received').then(() => {
         Deno.exit(0);
       });
@@ -538,7 +587,7 @@ export class AutonomousTradingAgent {
 
     // Handle SIGTERM
     const handleSigTerm = () => {
-      console.log('\n⚠️ Received SIGTERM...');
+      this.logger.log('ALERT', '⚠️ Received SIGTERM...');
       this.gracefulShutdown('SIGTERM received').then(() => {
         Deno.exit(0);
       });
@@ -576,32 +625,28 @@ export class AutonomousTradingAgent {
   }
 
   private logTradePlanSummary(tradePlan: TradePlan): void {
-    console.log('\n📋 TRADE PLAN SUMMARY:');
-    console.log(`   • Trades planned: ${tradePlan.trades.length}`);
-    console.log(`   • Risk exposure: ${(tradePlan.total_risk_exposure * 100).toFixed(2)}%`);
+    this.logger.log('PLAN', `📋 TRADE PLAN SUMMARY: ${tradePlan.trades.length} trades planned, ${(tradePlan.total_risk_exposure * 100).toFixed(2)}% risk exposure`);
     if (tradePlan.trades.length > 0) {
       tradePlan.trades.forEach((trade, i) => {
-        console.log(`   ${i + 1}. ${trade.action} ${trade.symbol} (${trade.quantity} shares) - $${trade.price_target}`);
+        this.logger.log('PLAN', `${i + 1}. ${trade.action} ${trade.symbol} (${trade.quantity} shares) - $${trade.price_target}`);
       });
     }
   }
 
   private logExecutionResults(executedTrades: ExecutedTrade[]): void {
-    console.log('\n🔄 TRADE EXECUTION RESULTS:');
     const successfulTrades = executedTrades.filter(t => t.status === 'executed');
+    this.logger.log('TRADE', `🔄 TRADE EXECUTION RESULTS: ${successfulTrades.length}/${executedTrades.length} trades executed`);
     if (successfulTrades.length > 0) {
       successfulTrades.forEach((trade, i) => {
-        console.log(`   ✅ ${i + 1}. ${trade.action} ${trade.symbol} - ${trade.executed_quantity} shares at $${trade.filled_avg_price || 'pending'}`);
+        this.logger.log('TRADE', `✅ ${i + 1}. ${trade.action} ${trade.symbol} - ${trade.executed_quantity} shares at $${trade.filled_avg_price || 'pending'}`);
       });
     } else {
-      console.log('   ⚠️  No trades executed');
+      this.logger.log('TRADE', '⚠️ No trades executed');
     }
   }
 
   private logStartupSummary(): void {
-    console.log('\n' + '='.repeat(80));
-    console.log('🎯 ADA ANALYTICS TRADING AGENT - READY FOR ACTION');
-    console.log('='.repeat(80));
+    this.logger.log('STATUS', '🎯 ADA ANALYTICS TRADING AGENT - READY FOR ACTION');
     this.logger.log('STATUS', `Account Balance: $${this.state.account_balance.toLocaleString()}`);
     this.logger.log('STATUS', `Strategy: ${this.state.current_strategy.toUpperCase()}`);
     this.logger.log('STATUS', `MCP Servers: ${this.activeClients.size} connected`);
@@ -612,6 +657,5 @@ export class AutonomousTradingAgent {
     } else {
       this.logger.log('ALERT', 'Email Alerts: DISABLED (Configure RESEND_API_KEY)');
     }
-    console.log('='.repeat(80) + '\n');
   }
 }

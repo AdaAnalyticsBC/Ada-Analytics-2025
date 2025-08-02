@@ -4,27 +4,67 @@
 
 import { MCPServerConfig, EmailConfig, WebServerConfig } from './types/interfaces.ts';
 
-// MCP Server Configuration
+// Function to get MCP Server Configuration
+export async function getMCPServers(): Promise<Record<string, MCPServerConfig>> {
+  let pythonCommand = "python3";
+  
+  try {
+    // Try to use virtual environment if it exists
+    await Deno.stat("../alpaca-mcp-server/venv/bin/python");
+    pythonCommand = "../alpaca-mcp-server/venv/bin/python";
+  } catch {
+    // Fall back to system python
+    pythonCommand = "python3";
+  }
+  
+  return {
+    alpaca: {
+      command: pythonCommand,
+      args: ["../alpaca-mcp-server/alpaca_mcp_server.py"],
+      env: {
+        ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
+        ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
+        ALPACA_PAPER_TRADE: "True"
+      }
+    },
+    supabase: {
+      command: "npx",
+      args: ["-y", "@supabase/mcp-server-supabase", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || ''],
+      env: {
+        SUPABASE_ACCESS_TOKEN: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ACCESS_TOKEN') || ""
+      }
+    },
+    "quiver-quant": {
+      command: "deno",
+      args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
+      env: {
+        QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
+      }
+    }
+  };
+}
+
+// Legacy export for backward compatibility
 export const MCP_SERVERS: Record<string, MCPServerConfig> = {
   alpaca: {
-    command: "python",
-    args: ["./alpaca-mcp-server/alpaca_mcp_server.py"],
+    command: "python3",
+    args: ["../alpaca-mcp-server/alpaca_mcp_server.py"],
     env: {
       ALPACA_API_KEY: Deno.env.get('ALPACA_API_KEY') || "",
-      ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || ""
+      ALPACA_SECRET_KEY: Deno.env.get('ALPACA_SECRET_KEY') || "",
+      ALPACA_PAPER_TRADE: "True"
     }
   },
   supabase: {
     command: "npx",
-    args: ["-y", "@supabase/mcp-server-supabase@latest", `--project-ref=${Deno.env.get('SUPABASE_PROJECT_REF') || ''}`],
+    args: ["-y", "@supabase/mcp-server-supabase", "--project-ref", Deno.env.get('SUPABASE_PROJECT_REF') || ''],
     env: {
-      SUPABASE_ACCESS_TOKEN: Deno.env.get('SUPABASE_ACCESS_TOKEN') || "",
-      SUPABASE_SERVICE_ROLE_KEY: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ""
+      SUPABASE_ACCESS_TOKEN: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ACCESS_TOKEN') || ""
     }
   },
   "quiver-quant": {
     command: "deno",
-    args: ["run", "--allow-net", "--allow-env", "./quiver-mcp-server/main.ts"],
+    args: ["run", "--allow-net", "--allow-env", "../quiver-mcp-server/main.ts"],
     env: {
       QUIVER_API_TOKEN: Deno.env.get('QUIVER_API_TOKEN') || ""
     }
@@ -47,7 +87,7 @@ export const TRADING_CONFIG = {
 
 // Email Configuration
 export const EMAIL_CONFIG: EmailConfig = {
-  from: Deno.env.get('EMAIL_FROM') || 'noreply@localhost',
+  from: Deno.env.get('EMAIL_FROM') || 'alerts@adaanalytics.io',
   recipients: Deno.env.get('EMAIL_RECIPIENTS')?.split(',').map(email => email.trim()) || []
 };
 
@@ -66,14 +106,17 @@ export const DATABASE_CONFIG = {
   SYMBOL_ANALYSIS_DAYS: 180
 };
 
-// AI/Claude Configuration
+// AI/Claude Configuration (Cost-optimized for <$8/month)
 export const AI_CONFIG = {
-  MODEL: "claude-3-5-sonnet-20241022",
-  MAX_TOKENS_TRADE_PLAN: 2000,
-  MAX_TOKENS_PREDICTIONS: 1500,
-  MAX_TOKENS_PERFORMANCE_ANALYSIS: 1000,
-  MAX_TOKENS_ADJUSTMENTS: 1500,
-  TEMPERATURE: 0.7
+  MODEL: "claude-3-5-haiku-20241022", // More cost-effective model
+  MAX_TOKENS_TRADE_PLAN: 800,
+  MAX_TOKENS_PREDICTIONS: 600,
+  MAX_TOKENS_PERFORMANCE_ANALYSIS: 400,
+  MAX_TOKENS_ADJUSTMENTS: 500,
+  TEMPERATURE: 0.5,
+  // Daily limits to prevent runaway costs
+  DAILY_REQUEST_LIMIT: 20,
+  MONTHLY_BUDGET_USD: 8
 };
 
 // Web Server Configuration

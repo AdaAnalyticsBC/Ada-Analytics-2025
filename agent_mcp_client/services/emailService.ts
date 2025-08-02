@@ -49,7 +49,7 @@ export class EmailService implements IEmailService {
       });
 
       if (error) {
-        this.logger.log('ALERT', `EMAIL:TODO: send (resend error) - ${subject}: ${error}`);
+        this.logger.log('ALERT', `EMAIL:TODO: send (resend error) - ${subject}: ${JSON.stringify(error)}`);
         return false;
       }
 

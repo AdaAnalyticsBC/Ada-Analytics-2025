@@ -29,6 +29,10 @@ export class WebServer {
   // Agent state management
   private getAgentState: () => AgentState;
   private updateAgentState: (updates: Partial<AgentState>) => Promise<void>;
+  
+  // MCP server control callbacks
+  private stopAllMCPServers: () => Promise<void>;
+  private startAllMCPServers: () => Promise<void>;
 
   constructor(
     logger: TradingLogger,
@@ -43,6 +47,10 @@ export class WebServer {
       getAgentState: () => AgentState;
       updateAgentState: (updates: Partial<AgentState>) => Promise<void>;
     },
+    mcpControl: {
+      stopAllMCPServers: () => Promise<void>;
+      startAllMCPServers: () => Promise<void>;
+    },
     config?: Partial<WebServerConfig>
   ) {
     this.logger = logger;
@@ -56,6 +64,9 @@ export class WebServer {
     
     this.getAgentState = stateManagement.getAgentState;
     this.updateAgentState = stateManagement.updateAgentState;
+    
+    this.stopAllMCPServers = mcpControl.stopAllMCPServers;
+    this.startAllMCPServers = mcpControl.startAllMCPServers;
   }
 
   /**
@@ -184,6 +195,56 @@ export class WebServer {
       case 'orders': {
         const orders = await this.tradingService.getPendingOrders();
         return this.createJsonResponse(orders);
+      }
+
+      case 'pause': {
+        if (request.method !== 'POST') {
+          return this.createErrorResponse('Method not allowed', 405);
+        }
+        const pauseToken = crypto.randomUUID();
+        await this.updateAgentState({ is_paused: true, pause_token: pauseToken });
+        // Stop all MCP servers when paused
+        await this.stopAllMCPServers();
+        this.logger.log('STATUS', '⏸️ Agent paused via API');
+        return this.createJsonResponse({ 
+          success: true, 
+          message: 'Agent paused successfully',
+          pause_token: pauseToken
+        });
+      }
+
+      case 'resume': {
+        if (request.method !== 'POST') {
+          return this.createErrorResponse('Method not allowed', 405);
+        }
+        await this.updateAgentState({ is_paused: false, pause_token: undefined });
+        // Start all MCP servers when resumed
+        await this.startAllMCPServers();
+        this.logger.log('STATUS', '▶️ Agent resumed via API');
+        return this.createJsonResponse({ 
+          success: true, 
+          message: 'Agent resumed successfully'
+        });
+      }
+
+      case 'kill': {
+        if (request.method !== 'POST') {
+          return this.createErrorResponse('Method not allowed', 405);
+        }
+        this.logger.log('ALERT', '🛑 Emergency kill initiated via API');
+        // Immediate shutdown
+        setTimeout(() => {
+          Deno.exit(0);
+        }, 1000);
+        return this.createJsonResponse({ 
+          success: true, 
+          message: 'Emergency shutdown initiated'
+        });
+      }
+
+      case 'usage': {
+        const usage = await this.getUsageStats();
+        return this.createJsonResponse(usage);
       }
 
       default:
@@ -1013,5 +1074,41 @@ export class WebServer {
       external: 0,
       arrayBuffers: 0
     };
+  }
+
+  /**
+   * Get API usage statistics for cost monitoring
+   */
+  private async getUsageStats(): Promise<Record<string, unknown>> {
+    const agentState = this.getAgentState();
+    const today = new Date();
+    const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    
+    try {
+      // Get usage from database if available
+      const monthlyUsage = await this.databaseService.getMonthlyUsage(thisMonth);
+      
+      return {
+        timestamp: new Date().toISOString(),
+        period: thisMonth,
+        claude_requests: monthlyUsage?.claude_requests || 0,
+        estimated_cost_usd: monthlyUsage?.estimated_cost || 0,
+        budget_limit_usd: 8,
+        budget_remaining_usd: Math.max(0, 8 - (monthlyUsage?.estimated_cost || 0)),
+        trades_this_month: monthlyUsage?.trades_count || 0,
+        last_request: agentState.last_run,
+        daily_limit_reached: (monthlyUsage?.daily_requests || 0) >= 20,
+        budget_warning: (monthlyUsage?.estimated_cost || 0) > 6.4 // 80% of budget
+      };
+    } catch (error) {
+      return {
+        timestamp: new Date().toISOString(),
+        period: thisMonth,
+        error: 'Usage tracking not available',
+        estimated_cost_usd: 0,
+        budget_limit_usd: 8,
+        message: 'Database usage tracking not implemented yet'
+      };
+    }
   }
 }
