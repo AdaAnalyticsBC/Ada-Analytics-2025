@@ -1,0 +1,12 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm run preview"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "always"
+restartPolicyMaxRetries = 3
+
+[env]
+NODE_VERSION = "18" 
