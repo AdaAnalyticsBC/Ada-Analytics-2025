@@ -126,6 +126,9 @@ DROP TRIGGER IF EXISTS update_trades_updated_at ON trades;
 DROP TRIGGER IF EXISTS update_trade_plans_updated_at ON trade_plans;
 DROP TRIGGER IF EXISTS update_api_usage_updated_at ON api_usage_tracking;
 
+-- Drop trigger that depends on create_user_profile function
+DROP TRIGGER IF EXISTS create_user_profile_trigger ON auth.users;
+
 -- =====================================================
 -- 3. FIX ROLE MUTABLE SEARCH_PATH FUNCTIONS
 -- =====================================================
@@ -230,6 +233,11 @@ CREATE TRIGGER update_trade_plans_updated_at
 CREATE TRIGGER update_api_usage_updated_at
   BEFORE UPDATE ON api_usage_tracking
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Recreate trigger for auto profile creation
+CREATE TRIGGER create_user_profile_trigger
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION create_user_profile();
 
 -- =====================================================
 -- 4. RECREATE ENHANCED RLS POLICIES
