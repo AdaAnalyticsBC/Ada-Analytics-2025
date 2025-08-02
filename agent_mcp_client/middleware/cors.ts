@@ -16,7 +16,7 @@ export class CorsMiddleware {
   constructor(config?: Partial<CorsConfig>) {
     this.config = {
       allowedOrigins: config?.allowedOrigins || [
-        'http://localhost:3000',
+        'http://localhost:8080',
         'https://ada-analytics.com',
         'https://dashboard.ada-analytics.com'
       ],

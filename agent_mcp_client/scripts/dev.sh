@@ -29,8 +29,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 QUIVER_API_TOKEN=your_quiver_token_here
 
 # Application
-BASE_URL=http://localhost:3000
-PORT=3000
+BASE_URL=http://localhost:8080
+PORT=8080
 NODE_ENV=development
 EOF
     echo "⚠️ Please fill in your API keys in .env file"
@@ -40,7 +40,7 @@ fi
 
 # Start with hot reload
 echo "🔄 Starting with hot reload..."
-echo "📊 Dashboard: http://localhost:3000"
-echo "🧪 Tests: http://localhost:3000/test"
+echo "📊 Dashboard: http://localhost:8080"
+echo "🧪 Tests: http://localhost:8080/test"
 
 deno run --allow-all --watch main_new.ts

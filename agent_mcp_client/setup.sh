@@ -83,8 +83,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 QUIVER_API_TOKEN=your_quiver_token_here
 
 # Application Configuration
-BASE_URL=http://localhost:3000
-PORT=3000
+BASE_URL=http://localhost:8080
+PORT=8080
 NODE_ENV=development
 TZ=America/New_York
 EOF

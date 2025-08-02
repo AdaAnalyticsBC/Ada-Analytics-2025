@@ -6,8 +6,8 @@ echo "🧪 Running test suite..."
 
 # Test environment setup
 export NODE_ENV=test
-export BASE_URL=http://localhost:3000
-export PORT=3000
+export BASE_URL=http://localhost:8080
+export PORT=8080
 
 # Start test server in background
 echo "🚀 Starting test server..."
@@ -20,7 +20,7 @@ sleep 5
 
 # Run API tests
 echo "🔍 Testing API endpoints..."
-curl -f http://localhost:3000/api/health || {
+curl -f http://localhost:8080/api/health || {
     echo "❌ Health check failed"
     kill $SERVER_PID 2>/dev/null || true
     exit 1
@@ -28,8 +28,8 @@ curl -f http://localhost:3000/api/health || {
 
 # Test individual services
 echo "🧪 Testing services..."
-curl -f http://localhost:3000/test/anthropic || echo "⚠️ Claude API test failed"
-curl -f http://localhost:3000/test/market-data || echo "⚠️ Market data test failed"
+curl -f http://localhost:8080/test/anthropic || echo "⚠️ Claude API test failed"
+curl -f http://localhost:8080/test/market-data || echo "⚠️ Market data test failed"
 
 # Cleanup
 echo "🧹 Cleaning up..."

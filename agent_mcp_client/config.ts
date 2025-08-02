@@ -121,8 +121,8 @@ export const AI_CONFIG = {
 
 // Web Server Configuration
 export const WEB_SERVER_CONFIG: WebServerConfig = {
-  port: parseInt(Deno.env.get("PORT") || "3000"),
-  baseUrl: Deno.env.get("BASE_URL") || 'https://your-railway-app.railway.app'
+  port: parseInt(Deno.env.get("PORT") || "8080"),
+  baseUrl: Deno.env.get("BASE_URL") || 'http://localhost:8080'
 };
 
 // Environment Variable Keys

@@ -103,7 +103,7 @@ export class AutonomousTradingAgent {
     // Initialize services with null clients initially
     this.marketDataService = new MarketDataService(null, this.logger);
     this.tradingService = new TradingService(null, this.logger);
-    this.emailService = new EmailService(this.logger, Deno.env.get("BASE_URL") || 'http://localhost:3000');
+    this.emailService = new EmailService(this.logger, Deno.env.get("BASE_URL") || 'http://localhost:8080');
     this.databaseService = new DatabaseService(null, this.logger);
     this.aiService = new AIService(this.logger);
 
@@ -650,7 +650,7 @@ export class AutonomousTradingAgent {
     this.logger.log('STATUS', `Account Balance: $${this.state.account_balance.toLocaleString()}`);
     this.logger.log('STATUS', `Strategy: ${this.state.current_strategy.toUpperCase()}`);
     this.logger.log('STATUS', `MCP Servers: ${this.activeClients.size} connected`);
-    this.logger.log('STATUS', `Web Interface: ${Deno.env.get("BASE_URL") || 'http://localhost:3000'}`);
+    this.logger.log('STATUS', `Web Interface: ${Deno.env.get("BASE_URL") || 'http://localhost:8080'}`);
     this.logger.log('STATUS', `Daily Trading: 6:00 AM EST`);
     if (this.emailService.isConfigured()) {
       this.logger.log('STATUS', 'Email Alerts: ENABLED');

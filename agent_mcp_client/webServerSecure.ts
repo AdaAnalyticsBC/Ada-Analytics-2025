@@ -61,9 +61,9 @@ export class SecureWebServer {
     this.corsMiddleware = new CorsMiddleware({
       allowedOrigins: [
         'http://localhost:5173', // SvelteKit dev
-        'http://localhost:3000',
-        'https://ada-analytics.com',
-        'https://dashboard.ada-analytics.com'
+        'http://localhost:8080',
+        'https://adaanalytics.io',
+        'https://dashboard.adaanalytics.io'
       ]
     });
     this.securityMiddleware = new SecurityMiddleware(logger);
