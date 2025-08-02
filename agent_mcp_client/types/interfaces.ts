@@ -358,8 +358,8 @@ export interface ITradingService {
   // Additional methods for compatibility
   setAlpacaClient(client: unknown): void;
   updateClient(client: unknown): void;
-  cancelOrder(orderId: string): Promise<void>;
-  getOrderStatus(orderId: string): Promise<Record<string, unknown>>;
+  cancelOrder(orderId: string): Promise<boolean>;
+  getOrderStatus(orderId: string): Promise<Record<string, unknown> | null>;
   getMarketData(symbol: string): Promise<Record<string, unknown>>;
   waitForMarketOpen(): Promise<void>;
   cancelAllOrders(): Promise<void>;

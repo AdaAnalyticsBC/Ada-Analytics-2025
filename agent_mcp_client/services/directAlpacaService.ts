@@ -282,7 +282,7 @@ export class DirectAlpacaService implements ITradingService {
     // Not used in direct API mode
   }
 
-  async cancelOrder(orderId: string): Promise<void> {
+  async cancelOrder(orderId: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/v2/orders/${orderId}`, {
         method: 'DELETE',
@@ -297,13 +297,14 @@ export class DirectAlpacaService implements ITradingService {
       }
 
       this.logger.log('TRADE', `Cancelled order ${orderId}`);
+      return true;
     } catch (error) {
       this.logger.log('ALERT', `Failed to cancel order ${orderId}: ${error}`);
-      throw error;
+      return false;
     }
   }
 
-  async getOrderStatus(orderId: string): Promise<Record<string, unknown>> {
+  async getOrderStatus(orderId: string): Promise<Record<string, unknown> | null> {
     try {
       const response = await fetch(`${this.baseUrl}/v2/orders/${orderId}`, {
         headers: {
@@ -319,7 +320,7 @@ export class DirectAlpacaService implements ITradingService {
       return await response.json();
     } catch (error) {
       this.logger.log('ALERT', `Failed to get order status for ${orderId}: ${error}`);
-      throw error;
+      return null;
     }
   }
 
