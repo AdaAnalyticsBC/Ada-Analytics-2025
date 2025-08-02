@@ -141,12 +141,7 @@ export class SecurityMiddleware {
    * Log security events
    */
   logSecurityEvent(event: SecurityEvent): void {
-    this.logger.log('ALERT', `SECURITY: ${event.type} - ${event.message}`, {
-      ip: event.ip,
-      userAgent: event.userAgent,
-      endpoint: event.endpoint,
-      userId: event.userId
-    });
+    this.logger.log('ALERT', `SECURITY: ${event.type} - ${event.message} - IP: ${event.ip || 'unknown'} - Endpoint: ${event.endpoint || 'unknown'}`);
   }
 
   /**
