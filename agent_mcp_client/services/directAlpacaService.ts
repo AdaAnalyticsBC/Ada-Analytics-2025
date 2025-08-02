@@ -183,7 +183,7 @@ export class DirectAlpacaService implements ITradingService {
   /**
    * Cancel all orders
    */
-  async cancelAllOrders(): Promise<void> {
+  async cancelAllOrders(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/v2/orders`, {
         method: 'DELETE',
@@ -198,9 +198,10 @@ export class DirectAlpacaService implements ITradingService {
       }
 
       this.logger.log('TRADE', 'Cancelled all orders');
+      return true;
     } catch (error) {
       this.logger.log('ALERT', `Failed to cancel orders: ${error}`);
-      throw error;
+      return false;
     }
   }
 

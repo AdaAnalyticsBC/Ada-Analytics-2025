@@ -362,7 +362,7 @@ export interface ITradingService {
   getOrderStatus(orderId: string): Promise<AlpacaOrder | null>;
   getMarketData(symbol: string): Promise<Record<string, unknown>>;
   waitForMarketOpen(): Promise<void>;
-  cancelAllOrders(): Promise<void>;
+  cancelAllOrders(): Promise<boolean>;
 }
 
 export interface IEmailService {
