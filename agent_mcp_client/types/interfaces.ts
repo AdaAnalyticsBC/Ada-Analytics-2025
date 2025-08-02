@@ -355,6 +355,14 @@ export interface ITradingService {
   getCurrentPositions(): Promise<Position[]>;
   getPendingOrders(): Promise<Order[]>;
   testConnection(): Promise<{ success: boolean; message: string }>;
+  // Additional methods for compatibility
+  setAlpacaClient(client: unknown): void;
+  updateClient(client: unknown): void;
+  cancelOrder(orderId: string): Promise<void>;
+  getOrderStatus(orderId: string): Promise<Record<string, unknown>>;
+  getMarketData(symbol: string): Promise<Record<string, unknown>>;
+  waitForMarketOpen(): Promise<void>;
+  cancelAllOrders(): Promise<void>;
 }
 
 export interface IEmailService {

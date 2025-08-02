@@ -228,7 +228,7 @@ export class AutonomousTradingAgent {
     
     // Update service clients to null
     this.marketDataService.updateClient(null);
-    this.tradingService.updateClient(null);  
+          this.tradingService.updateClient(null);  
     this.databaseService.updateClient(null);
     
     this.logger.log('STATUS', '🛑 All MCP servers stopped');

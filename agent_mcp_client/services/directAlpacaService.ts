@@ -207,7 +207,7 @@ export class DirectAlpacaService implements ITradingService {
   /**
    * Get stock quote
    */
-  async getStockQuote(symbol: string): Promise<any> {
+  async getStockQuote(symbol: string): Promise<Record<string, unknown> | null> {
     try {
       const response = await fetch(`https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`, {
         headers: {
@@ -274,11 +274,11 @@ export class DirectAlpacaService implements ITradingService {
   }
 
   // Additional methods for compatibility
-  setAlpacaClient(client: Record<string, unknown>): void {
+  setAlpacaClient(client: unknown): void {
     // Not used in direct API mode
   }
 
-  updateClient(client: Record<string, unknown>): void {
+  updateClient(client: unknown): void {
     // Not used in direct API mode
   }
 
@@ -344,7 +344,7 @@ export class DirectAlpacaService implements ITradingService {
     }
   }
 
-  async waitForMarketOpen(): Promise<void> {
+  waitForMarketOpen(): Promise<void> {
     this.logger.log('STATUS', 'Market open check not implemented for direct API');
     return Promise.resolve();
   }
