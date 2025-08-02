@@ -6,6 +6,35 @@ const QUIVER_API_BASE = "https://api.quiverquant.com/beta";
 const API_TOKEN = Deno.env.get('QUIVER_API_TOKEN');
 const PORT = parseInt(Deno.env.get('PORT') || "8081");
 
+// Sleep state management
+let isSleeping = false;
+let sleepTimeout: number | null = null;
+let lastActivityTime = Date.now();
+const SLEEP_DELAY = 30 * 60 * 1000; // 30 minutes of inactivity
+
+function resetSleepTimer() {
+  lastActivityTime = Date.now();
+  if (sleepTimeout) {
+    clearTimeout(sleepTimeout);
+    sleepTimeout = null;
+  }
+  
+  if (!isSleeping) {
+    sleepTimeout = setTimeout(() => {
+      console.log("🛌 QuiverQuant MCP Server going to sleep due to inactivity");
+      isSleeping = true;
+    }, SLEEP_DELAY);
+  }
+}
+
+function wakeUp() {
+  if (isSleeping) {
+    console.log("🌅 QuiverQuant MCP Server waking up");
+    isSleeping = false;
+  }
+  resetSleepTimer();
+}
+
 const server = new McpServer({
   name: "quiver-quant",
   version: "1.0.0",
@@ -23,7 +52,17 @@ const httpServer = Deno.serve({ port: PORT }, (req) => {
     return new Response(JSON.stringify({ 
       status: 'healthy', 
       timestamp: new Date().toISOString(),
-      service: 'quiver-mcp-server'
+      service: 'quiver-mcp-server',
+      isSleeping,
+      lastActivity: new Date(lastActivityTime).toISOString()
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } else if (url.pathname === '/wake') {
+    wakeUp();
+    return new Response(JSON.stringify({ 
+      status: 'waking up',
+      timestamp: new Date().toISOString()
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -108,6 +147,57 @@ function formatCongressTrade(trade: CongressTrade): string {
 // Q U I V E R   Q U A N T    T O O L S
 // ------------------------------------------------------ //
 
+// Sleep Management Tools
+server.tool(
+  "get_sleep_status",
+  "Get the current sleep status of the QuiverQuant MCP server",
+  {},
+  async () => {
+    wakeUp(); // Wake up when status is requested
+    
+    const status = {
+      isSleeping,
+      lastActivity: new Date(lastActivityTime).toISOString(),
+      timeUntilSleep: SLEEP_DELAY - (Date.now() - lastActivityTime),
+      sleepDelay: SLEEP_DELAY
+    };
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `QuiverQuant MCP Server Status:\n\n` +
+                `Sleep Status: ${isSleeping ? '🛌 Sleeping' : '🌅 Awake'}\n` +
+                `Last Activity: ${new Date(lastActivityTime).toLocaleString()}\n` +
+                `Time Until Sleep: ${Math.max(0, Math.floor((SLEEP_DELAY - (Date.now() - lastActivityTime)) / 1000 / 60))} minutes\n` +
+                `Sleep Delay: ${SLEEP_DELAY / 1000 / 60} minutes of inactivity`
+        },
+      ],
+    };
+  },
+)
+
+server.tool(
+  "wake_up_server",
+  "Wake up the QuiverQuant MCP server if it's sleeping",
+  {},
+  async () => {
+    const wasSleeping = isSleeping;
+    wakeUp();
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: wasSleeping 
+            ? "🌅 QuiverQuant MCP Server has been woken up and is now active"
+            : "✅ QuiverQuant MCP Server was already awake and sleep timer has been reset"
+        },
+      ],
+    };
+  },
+)
+
 // Live Congress Trading
 server.tool(
   "get_live_congress_trading",
@@ -117,6 +207,8 @@ server.tool(
     representative: z.string().optional().describe("Congressperson's name to filter by"),
   },
   async ({ normalized, representative }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (normalized !== undefined) {
@@ -211,6 +303,8 @@ server.tool(
     insider: z.string().optional().describe("Insider name to filter by"),
   },
   async ({ ticker, insider }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (ticker) {
@@ -298,6 +392,8 @@ server.tool(
     issue: z.string().optional().describe("Issue area to filter by"),
   },
   async ({ client, registrant, issue }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (client) {
@@ -389,6 +485,8 @@ server.tool(
     institution: z.string().optional().describe("Institution name to filter by"),
   },
   async ({ ticker, institution }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (ticker) {
@@ -476,6 +574,8 @@ server.tool(
     ticker: z.string().optional().describe("Stock ticker symbol to filter by"),
   },
   async ({ ticker }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (ticker) {
@@ -555,6 +655,8 @@ server.tool(
     etf: z.string().optional().describe("ETF ticker symbol to filter by"),
   },
   async ({ ticker, etf }) => {
+    wakeUp(); // Wake up when any tool is used
+    
     const params: Record<string, string> = {};
     
     if (ticker) {
@@ -611,6 +713,10 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Quiver Quant MCP Server running on stdio");
+  
+  // Initialize sleep timer
+  resetSleepTimer();
+  console.error("🛌 Sleep functionality enabled - server will sleep after 30 minutes of inactivity");
 }
 
 main().catch((error) => {

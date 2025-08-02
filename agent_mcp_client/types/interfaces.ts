@@ -313,6 +313,10 @@ export interface AgentEvent {
 export interface EmailConfig {
   from: string;
   recipients: string[];
+  tradePlanRecipients: string[];
+  dailySummaryRecipients: string[];
+  errorAlertRecipients: string[];
+  startupShutdownRecipients: string[];
   resendApiKey?: string;
 }
 
@@ -373,6 +377,7 @@ export interface IEmailService {
   sendResumeEmail(resumeToken: string): Promise<void>;
   isConfigured(): boolean;
   sendTestEmail(recipient?: string): Promise<boolean>;
+  getCurrentEmailCount(): Promise<{ count: number; limit: number; canSend: boolean }>;
 }
 
 export interface IDatabaseService {
@@ -394,6 +399,9 @@ export interface IDatabaseService {
     daily_requests: number;
   } | null>;
   trackApiUsage(service: 'claude' | 'alpaca' | 'quiver', requestCount: number, tokensUsed: number, estimatedCost: number): Promise<void>;
+  storeAgentState(state: AgentState): Promise<void>;
+  getAgentState(): Promise<AgentState | null>;
+  updateAgentState(updates: Partial<AgentState>): Promise<void>;
 }
 
 export interface IAIService {

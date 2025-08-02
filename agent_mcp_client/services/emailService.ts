@@ -11,15 +11,18 @@ export class EmailService implements IEmailService {
   private resend: Resend | null = null;
   private logger: TradingLogger;
   private baseUrl: string;
+  private dailyEmailCount: number = 0;
+  private lastEmailResetDate: string = '';
+  private resendApiKey: string | null = null;
 
   constructor(logger: TradingLogger, baseUrl: string) {
     this.logger = logger;
     this.baseUrl = baseUrl;
     
     // Initialize Resend if API key is available
-    const resendApiKey = Deno.env.get(ENV_KEYS.RESEND_API_KEY);
-    if (resendApiKey) {
-      this.resend = new Resend(resendApiKey);
+    this.resendApiKey = Deno.env.get(ENV_KEYS.RESEND_API_KEY) || null;
+    if (this.resendApiKey) {
+      this.resend = new Resend(this.resendApiKey);
     }
   }
 
@@ -31,12 +34,99 @@ export class EmailService implements IEmailService {
   }
 
   /**
+   * Check and reset daily email count
+   */
+  private checkDailyEmailLimit(): boolean {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Reset counter if it's a new day
+    if (this.lastEmailResetDate !== today) {
+      this.dailyEmailCount = 0;
+      this.lastEmailResetDate = today;
+    }
+    
+    // Check if we've reached the daily limit (100 emails)
+    if (this.dailyEmailCount >= 100) {
+      this.logger.log('ALERT', `Daily email limit reached (100). Skipping email send.`);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Fetch email count from Resend API for today
+   */
+  private async fetchResendEmailCount(): Promise<number> {
+    if (!this.resendApiKey) {
+      this.logger.log('ALERT', 'No Resend API key available to fetch email count');
+      return 0;
+    }
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const startOfDay = new Date(today + 'T00:00:00Z').toISOString();
+      const endOfDay = new Date(today + 'T23:59:59Z').toISOString();
+
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        this.logger.log('ALERT', `Failed to fetch Resend email count: ${response.status}`);
+        return 0;
+      }
+
+      const data = await response.json();
+      
+      // Filter emails sent today
+      const todayEmails = data.data?.filter((email: any) => {
+        const emailDate = new Date(email.created_at).toISOString().split('T')[0];
+        return emailDate === today;
+      }) || [];
+
+      const emailCount = todayEmails.length;
+      this.logger.log('STATUS', `📊 Resend API: ${emailCount} emails sent today`);
+      
+      return emailCount;
+      
+    } catch (error) {
+      this.logger.log('ALERT', `Error fetching Resend email count: ${error}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Check daily email limit using Resend API
+   */
+  private async checkResendDailyLimit(): Promise<boolean> {
+    const emailCount = await this.fetchResendEmailCount();
+    
+    if (emailCount >= 100) {
+      this.logger.log('ALERT', `🚫 Daily email limit reached (${emailCount}/100). Skipping email send to prevent account shutdown.`);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * Send email with error handling
    */
   async sendEmail(to: string, subject: string, content: string): Promise<boolean> {
     // Skip if email not configured
     if (!this.isConfigured()) {
       this.logger.log('ALERT', `EMAIL:TODO: send (not configured) - ${subject}`);
+      return false;
+    }
+
+    // Check daily email limit using Resend API
+    const canSend = await this.checkResendDailyLimit();
+    if (!canSend) {
       return false;
     }
 
@@ -53,7 +143,9 @@ export class EmailService implements IEmailService {
         return false;
       }
 
-      this.logger.log('STATUS', `📧 Email sent: ${subject} to ${to}`);
+      // Increment local counter for logging
+      this.dailyEmailCount++;
+      this.logger.log('STATUS', `📧 Email sent: ${subject} to ${to} (${this.dailyEmailCount}/100 today)`);
       return true;
       
     } catch (error) {
@@ -73,19 +165,19 @@ export class EmailService implements IEmailService {
     const emailContent = this.buildTradePlanEmailContent(tradePlan, pauseToken);
     
     let emailsSent = 0;
-    for (const recipient of EMAIL_CONFIG.recipients) {
+    for (const recipient of EMAIL_CONFIG.tradePlanRecipients) {
       if (await this.sendEmail(recipient, `📊 Daily Trade Plan - ${tradePlan.date}`, emailContent)) {
         emailsSent++;
       }
     }
     
-    this.logger.log('STATUS', `Trade plan emailed to ${emailsSent}/${EMAIL_CONFIG.recipients.length} recipients`);
+    this.logger.log('STATUS', `Trade plan emailed to ${emailsSent}/${EMAIL_CONFIG.tradePlanRecipients.length} recipients`);
     
     // Return the pause token for the caller to store
     return pauseToken;
   }
 
-  /**
+    /**
    * Send daily summary email
    */
   async sendDailySummary(accountDetails: AccountDetails, todayTrades: TradeRecord[]): Promise<void> {
@@ -94,29 +186,31 @@ export class EmailService implements IEmailService {
     const summaryContent = this.buildDailySummaryContent(accountDetails, todayTrades);
 
     let emailsSent = 0;
-    for (const recipient of EMAIL_CONFIG.recipients) {
+    for (const recipient of EMAIL_CONFIG.dailySummaryRecipients) {
       if (await this.sendEmail(recipient, `📊 Trading Agent - Daily Summary ${new Date().toISOString().split('T')[0]}`, summaryContent)) {
         emailsSent++;
       }
     }
-
-    this.logger.log('STATUS', `Daily summary emailed to ${emailsSent}/${EMAIL_CONFIG.recipients.length} recipients`);
+    
+    this.logger.log('STATUS', `Daily summary emailed to ${emailsSent}/${EMAIL_CONFIG.dailySummaryRecipients.length} recipients`);
   }
 
   /**
    * Send error alert email
    */
   async sendErrorAlert(error: Error): Promise<void> {
+    this.logger.log('ALERT', 'Sending error alert email...');
+
     const errorContent = this.buildErrorAlertContent(error);
 
     let emailsSent = 0;
-    for (const recipient of EMAIL_CONFIG.recipients) {
-      if (await this.sendEmail(recipient, '🚨 CRITICAL: Trading Agent Error - Paused', errorContent)) {
+    for (const recipient of EMAIL_CONFIG.errorAlertRecipients) {
+      if (await this.sendEmail(recipient, '🚨 Trading Agent - Error Alert', errorContent)) {
         emailsSent++;
       }
     }
     
-    this.logger.log('STATUS', `Error alert sent to ${emailsSent}/${EMAIL_CONFIG.recipients.length} recipients`);
+    this.logger.log('STATUS', `Error alert sent to ${emailsSent}/${EMAIL_CONFIG.errorAlertRecipients.length} recipients`);
   }
 
   /**
@@ -139,32 +233,51 @@ export class EmailService implements IEmailService {
    * Send startup notification
    */
   async sendStartupNotification(accountBalance: number, connectedServers: string[]): Promise<void> {
+    this.logger.log('STATUS', 'Sending startup notification...');
+
     const startupContent = this.buildStartupNotificationContent(accountBalance, connectedServers);
 
     let emailsSent = 0;
-    for (const recipient of EMAIL_CONFIG.recipients) {
-      if (await this.sendEmail(recipient, '🚀 Trading Agent Started Successfully', startupContent)) {
+    for (const recipient of EMAIL_CONFIG.startupShutdownRecipients) {
+      if (await this.sendEmail(recipient, '🚀 Trading Agent - Startup Notification', startupContent)) {
         emailsSent++;
       }
     }
     
-    this.logger.log('STATUS', `Startup notification sent to ${emailsSent}/${EMAIL_CONFIG.recipients.length} recipients`);
+    this.logger.log('STATUS', `Startup notification sent to ${emailsSent}/${EMAIL_CONFIG.startupShutdownRecipients.length} recipients`);
   }
 
   /**
    * Send shutdown notification
    */
   async sendShutdownNotification(reason: string, accountBalance: number, openPositions: number): Promise<void> {
+    this.logger.log('STATUS', 'Sending shutdown notification...');
+
     const shutdownContent = this.buildShutdownNotificationContent(reason, accountBalance, openPositions);
 
     let emailsSent = 0;
-    for (const recipient of EMAIL_CONFIG.recipients) {
-      if (await this.sendEmail(recipient, '🛑 Trading Agent Shutdown', shutdownContent)) {
+    for (const recipient of EMAIL_CONFIG.startupShutdownRecipients) {
+      if (await this.sendEmail(recipient, '🛑 Trading Agent - Shutdown Notification', shutdownContent)) {
         emailsSent++;
       }
     }
     
-    this.logger.log('STATUS', `Shutdown notification sent to ${emailsSent}/${EMAIL_CONFIG.recipients.length} recipients`);
+    this.logger.log('STATUS', `Shutdown notification sent to ${emailsSent}/${EMAIL_CONFIG.startupShutdownRecipients.length} recipients`);
+  }
+
+  /**
+   * Get current email count from Resend API
+   */
+  async getCurrentEmailCount(): Promise<{ count: number; limit: number; canSend: boolean }> {
+    const count = await this.fetchResendEmailCount();
+    const limit = 100;
+    const canSend = count < limit;
+    
+    return {
+      count,
+      limit,
+      canSend
+    };
   }
 
   /**
@@ -174,7 +287,7 @@ export class EmailService implements IEmailService {
     const testRecipient = recipient || EMAIL_CONFIG.recipients[0];
     const testContent = this.buildTestEmailContent();
     
-    return await this.sendEmail(testRecipient, 'Ada Analytics Test Email', testContent);
+    return await this.sendEmail(testRecipient, '🧪 Trading Agent - Test Email', testContent);
   }
 
   // Private methods for building email content
@@ -337,7 +450,7 @@ ${error.stack || 'No stack trace available'}
     
     <h3>Controls</h3>
     <p>You can monitor and control the agent using the web interface:</p>
-    <p><a href="${this.baseUrl}" style="color: #007bff;">Agent Dashboard</a></p>
+    <p><a href="${this.baseUrl.replace('/api', '')}" style="color: #007bff;">Agent Dashboard</a></p>
     
     <p><small>Started at ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</small></p>
     `;

@@ -412,6 +412,128 @@ export class DatabaseService implements IDatabaseService {
   }
 
   /**
+   * Store agent state in database
+   */
+  async storeAgentState(state: AgentState): Promise<void> {
+    if (!this.supabaseClient) return;
+
+    try {
+      // First, delete any existing state records
+      await this.supabaseClient.callTool({
+        name: 'delete',
+        arguments: {
+          table: 'agent_state',
+          where: 'id = "current"'
+        }
+      });
+
+      // Insert new state
+      await this.supabaseClient.callTool({
+        name: 'insert',
+        arguments: {
+          table: 'agent_state',
+          data: {
+            id: 'current',
+            is_paused: state.is_paused,
+            last_run: state.last_run,
+            current_strategy: state.current_strategy,
+            account_balance: state.account_balance,
+            open_positions: JSON.stringify(state.open_positions),
+            trade_history: JSON.stringify(state.trade_history),
+            pause_token: state.pause_token,
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString()
+          }
+        }
+      });
+
+      this.logger.log('STATUS', 'Agent state stored in database');
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to store agent state: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieve agent state from database
+   */
+  async getAgentState(): Promise<AgentState | null> {
+    if (!this.supabaseClient) return null;
+
+    try {
+      const result = await this.supabaseClient.callTool({
+        name: 'select',
+        arguments: {
+          table: 'agent_state',
+          where: 'id = "current"',
+          limit: 1
+        }
+      });
+
+      if (result && result.data && Array.isArray(result.data) && result.data.length > 0) {
+        const stateData = result.data[0];
+        
+        return {
+          is_paused: stateData.is_paused || false,
+          last_run: stateData.last_run || new Date().toISOString(),
+          current_strategy: stateData.current_strategy || 'default',
+          account_balance: stateData.account_balance || 0,
+          open_positions: stateData.open_positions ? JSON.parse(stateData.open_positions) : [],
+          trade_history: stateData.trade_history ? JSON.parse(stateData.trade_history) : [],
+          pause_token: stateData.pause_token || undefined
+        };
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to retrieve agent state: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Update agent state in database
+   */
+  async updateAgentState(updates: Partial<AgentState>): Promise<void> {
+    if (!this.supabaseClient) return;
+
+    try {
+      // Get current state
+      const currentState = await this.getAgentState();
+      if (!currentState) {
+        // If no state exists, create new one
+        await this.storeAgentState(updates as AgentState);
+        return;
+      }
+
+      // Merge updates with current state
+      const updatedState = { ...currentState, ...updates };
+
+      // Update the state
+      await this.supabaseClient.callTool({
+        name: 'update',
+        arguments: {
+          table: 'agent_state',
+          where: 'id = "current"',
+          data: {
+            is_paused: updatedState.is_paused,
+            last_run: updatedState.last_run,
+            current_strategy: updatedState.current_strategy,
+            account_balance: updatedState.account_balance,
+            open_positions: JSON.stringify(updatedState.open_positions),
+            trade_history: JSON.stringify(updatedState.trade_history),
+            pause_token: updatedState.pause_token,
+            updated_at: new Date().toISOString()
+          }
+        }
+      });
+
+      this.logger.log('STATUS', 'Agent state updated in database');
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to update agent state: ${error}`);
+    }
+  }
+
+  /**
    * Test database connection
    */
   async testConnection(): Promise<{ success: boolean; message: string }> {

@@ -487,6 +487,24 @@ export class SecureWebServer {
     body: unknown
   ): Promise<Response> {
     
+    if (path === '/api/email/count' && method === 'GET') {
+      try {
+        const emailCount = await this.emailService.getCurrentEmailCount();
+        return new Response(JSON.stringify({
+          success: true,
+          ...emailCount,
+          timestamp: new Date().toISOString()
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch email count' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
     if (path === '/api/email/test' && method === 'POST') {
       // Validate input
       const validation = this.securityMiddleware.validateInput(body || {}, VALIDATION_SCHEMAS.emailRequest);

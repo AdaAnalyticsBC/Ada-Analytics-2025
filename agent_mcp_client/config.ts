@@ -108,7 +108,11 @@ export const TRADING_CONFIG = {
 // Email Configuration
 export const EMAIL_CONFIG: EmailConfig = {
   from: Deno.env.get('EMAIL_FROM') || '',
-  recipients: Deno.env.get('EMAIL_RECIPIENTS')?.split(',').map(email => email.trim()) || []
+  recipients: ['jcoawett@asu.edu'], // Only send to jcoawett@asu.edu for all emails
+  tradePlanRecipients: ['jcoawett@asu.edu', 'drrayhsu@gmail.com'], // Trade plans and reports to both
+  dailySummaryRecipients: ['jcoawett@asu.edu'], // Daily summaries only to jcoawett@asu.edu
+  errorAlertRecipients: ['jcoawett@asu.edu'], // Error alerts only to jcoawett@asu.edu
+  startupShutdownRecipients: ['jcoawett@asu.edu'] // Startup/shutdown notifications only to jcoawett@asu.edu
 };
 
 // Cron Schedule Configuration

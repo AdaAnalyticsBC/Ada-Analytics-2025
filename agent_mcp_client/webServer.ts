@@ -128,8 +128,14 @@ export class WebServer {
           return await this.handleTestRequest(path, url, request);
         }
 
-        // Dashboard Routes
-        return await this.handleDashboardRequest(path, url, request);
+        // Redirect dashboard routes to Svelte frontend
+        if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/performance') || path.startsWith('/trades')) {
+          const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
+          return Response.redirect(`${frontendUrl}${path}`, 302);
+        }
+
+        // Default to 404
+        return this.createNotFoundResponse();
 
       } catch (error) {
         this.logger.log('ALERT', `Web server error: ${error}`);
@@ -197,6 +203,19 @@ export class WebServer {
       case 'orders': {
         const orders = await this.tradingService.getPendingOrders();
         return this.createJsonResponse(orders);
+      }
+
+      case 'email-count': {
+        try {
+          const emailCount = await this.emailService.getCurrentEmailCount();
+          return this.createJsonResponse({
+            success: true,
+            ...emailCount,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          return this.createErrorResponse(error, 500);
+        }
       }
 
       case 'pause': {
@@ -336,24 +355,6 @@ export class WebServer {
   }
 
   /**
-   * Handle dashboard requests
-   */
-  private async handleDashboardRequest(path: string, url: URL, request: Request): Promise<Response> {
-    switch (path) {
-      case '/':
-        return await this.createMainDashboard();
-      case '/performance':
-        return await this.createPerformancePage();
-      case '/trades':
-        return await this.createTradesPage();
-      case '/test':
-        return this.createTestDashboard();
-      default:
-        return this.createNotFoundResponse();
-    }
-  }
-
-  /**
    * Execute test functions
    */
   private async executeTest(testType: string): Promise<TestResult> {
@@ -439,191 +440,6 @@ export class WebServer {
 
   // Page creation methods
 
-  private async createMainDashboard(): Promise<Response> {
-    const agentState = this.getAgentState();
-    const performance = await this.databaseService.getTradingPerformance();
-    
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Ada Analytics Trading Agent</title>
-      ${this.getCommonStyles()}
-    </head>
-    <body>
-      <div class="container">
-        <h1>🤖 Ada Analytics Trading Agent</h1>
-        
-        ${this.getNavigationBar()}
-        
-        <div class="status ${agentState.is_paused ? 'paused' : 'active'}">
-          <strong>Status:</strong> ${agentState.is_paused ? '⏸️ PAUSED' : '▶️ ACTIVE'}
-        </div>
-        
-        <h2>Account Information</h2>
-        <p><strong>Account Balance:</strong> $${agentState.account_balance.toLocaleString()}</p>
-        <p><strong>Strategy:</strong> ${agentState.current_strategy}</p>
-        <p><strong>Last Run:</strong> ${agentState.last_run || 'Never'}</p>
-        
-        <h2>Quick Stats (90 days)</h2>
-        <div class="quick-stats">
-          <div class="stat-card">
-            <div class="stat-value">${performance.total_trades}</div>
-            <div class="stat-label">Total Trades</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value ${performance.win_rate > 0.5 ? 'positive' : 'negative'}">${(performance.win_rate * 100).toFixed(1)}%</div>
-            <div class="stat-label">Win Rate</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value ${performance.avg_return > 0 ? 'positive' : 'negative'}">${(performance.avg_return * 100).toFixed(2)}%</div>
-            <div class="stat-label">Avg Return</div>
-          </div>
-        </div>
-        
-        <h2>Controls</h2>
-        <div class="controls">
-          <button class="btn ${agentState.is_paused ? 'btn-success' : 'btn-danger'}" onclick="toggleTrading()">
-            ${agentState.is_paused ? '▶️ Resume Trading' : '⏸️ Pause Trading'}
-          </button>
-          <button class="btn btn-info" onclick="window.location.href='/performance'">📊 View Performance</button>
-          <button class="btn btn-warning" onclick="window.location.href='/test'">🧪 Test Functions</button>
-          <br><br>
-          <button class="btn btn-shutdown" onclick="window.location.href='/shutdown'">🛑 Shutdown Agent</button>
-        </div>
-      </div>
-      
-      <script>
-        function toggleTrading() {
-          const isPaused = ${agentState.is_paused};
-          if (isPaused) {
-            // For resume, need to check for existing pause token
-            window.location.href = '/resume/${agentState.pause_token || 'invalid'}';
-          } else {
-            // For pause, generate new token
-            window.location.href = '/pause/' + crypto.randomUUID();
-          }
-        }
-      </script>
-    </body>
-    </html>
-    `;
-    
-    return this.createHtmlResponse(html);
-  }
-
-  private async createPerformancePage(): Promise<Response> {
-    const performance = await this.databaseService.getTradingPerformance();
-    
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Trading Performance - Ada Analytics</title>
-      ${this.getCommonStyles()}
-    </head>
-    <body>
-      <div class="container">
-        ${this.getNavigationBar()}
-        
-        <h1>📊 Trading Performance (90 days)</h1>
-        
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-value">${performance.total_trades}</div>
-            <div class="metric-label">Total Trades</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value ${performance.win_rate > 0.5 ? 'positive' : 'negative'}">${(performance.win_rate * 100).toFixed(1)}%</div>
-            <div class="metric-label">Win Rate</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value ${performance.avg_return > 0 ? 'positive' : 'negative'}">${(performance.avg_return * 100).toFixed(2)}%</div>
-            <div class="metric-label">Avg Return</div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-value ${performance.total_return > 0 ? 'positive' : 'negative'}">${(performance.total_return * 100).toFixed(2)}%</div>
-            <div class="metric-label">Total Return</div>
-          </div>
-        </div>
-        
-        <h2>Symbols Traded</h2>
-        <p>${performance.symbols_traded.join(', ') || 'No trades yet'}</p>
-        
-        <h2>Recent Trades</h2>
-        <div class="trades-list">
-          ${performance.recent_trades.map(trade => `
-            <div class="trade-item">
-              <strong>${trade.symbol}</strong> - ${trade.action} ${trade.quantity} shares at $${trade.price_target}
-              <span class="trade-date">${new Date(trade.executed_at).toLocaleDateString()}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
-    
-    return this.createHtmlResponse(html);
-  }
-
-  private async createTradesPage(): Promise<Response> {
-    const trades = await this.databaseService.getHistoricalTrades(30);
-    
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Trade History - Ada Analytics</title>
-      ${this.getCommonStyles()}
-    </head>
-    <body>
-      <div class="container">
-        ${this.getNavigationBar()}
-        
-        <h1>📈 Trade History (30 days)</h1>
-        
-        <table class="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Symbol</th>
-              <th>Action</th>
-              <th>Quantity</th>
-              <th>Target Price</th>
-              <th>Executed Price</th>
-              <th>Confidence</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${trades.map(trade => `
-              <tr>
-                <td>${new Date(trade.executed_at).toLocaleDateString()}</td>
-                <td><strong>${trade.symbol}</strong></td>
-                <td>${trade.action}</td>
-                <td>${trade.quantity}</td>
-                <td>$${trade.price_target?.toFixed(2) || 'N/A'}</td>
-                <td>$${trade.executed_price?.toFixed(2) || 'Pending'}</td>
-                <td>${((trade.confidence || 0) * 100).toFixed(0)}%</td>
-                <td>${trade.status}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        ${trades.length === 0 ? '<p>No trades found in the last 30 days.</p>' : ''}
-      </div>
-    </body>
-    </html>
-    `;
-    
-    return this.createHtmlResponse(html);
-  }
-
   private createTestDashboard(): Response {
     const html = `
     <!DOCTYPE html>
@@ -634,7 +450,6 @@ export class WebServer {
     </head>
     <body>
       <div class="container">
-        ${this.getNavigationBar()}
         
         <h1>🧪 Test Functions</h1>
         
@@ -686,7 +501,6 @@ export class WebServer {
     </head>
     <body>
       <div class="container">
-        ${this.getNavigationBar()}
         
         <h1>${result.success ? '✅' : '❌'} Test Result: ${testType}</h1>
         
@@ -716,7 +530,6 @@ export class WebServer {
     </head>
     <body>
       <div class="container">
-        ${this.getNavigationBar()}
         
         <h1>❌ Test Failed: ${testType}</h1>
         
@@ -841,73 +654,43 @@ export class WebServer {
 
   private getCommonStyles(): string {
     return `
-    <style>
-      body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-      .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
-      .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
-      .active { background: #d4edda; border: 1px solid #c3e6cb; }
-      .paused { background: #f8d7da; border: 1px solid #f5c6cb; }
-      .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; border-radius: 5px; }
-      .status-info { background: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; border-radius: 5px; }
-      
-      .btn { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; }
-      .btn-primary { background: #007bff; color: white; }
-      .btn-success { background: #28a745; color: white; }
-      .btn-danger { background: #dc3545; color: white; }
-      .btn-warning { background: #ffc107; color: black; }
-      .btn-info { background: #17a2b8; color: white; }
-      .btn-secondary { background: #6c757d; color: white; }
-      .btn-shutdown { background: #fd7e14; color: white; }
-      
-      .quick-stats { display: flex; gap: 20px; margin: 20px 0; }
-      .stat-card { background: #f8f9fa; padding: 15px; border-radius: 5px; flex: 1; text-align: center; }
-      .stat-value { font-size: 24px; font-weight: bold; }
-      .stat-label { color: #6c757d; font-size: 14px; }
-      .positive { color: #28a745; }
-      .negative { color: #dc3545; }
-      
-      .controls { margin: 20px 0; }
-      .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-      .test-section { background: #f8f9fa; padding: 20px; border-radius: 5px; }
-      
-      .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
-      .metric-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; text-align: center; }
-      .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
-      .metric-label { color: #6c757d; font-size: 14px; }
-      
-      .trades-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-      .trades-table th, .trades-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-      .trades-table th { background-color: #f8f9fa; font-weight: bold; }
-      
-      .trades-list { margin: 20px 0; }
-      .trade-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-      .trade-date { color: #6c757d; font-size: 14px; }
-      
-      .test-result { padding: 20px; margin: 20px 0; border-radius: 5px; }
-      .test-result.success { background: #d4edda; border: 1px solid #c3e6cb; }
-      .test-result.error { background: #f8d7da; border: 1px solid #f5c6cb; }
-      .error-text { color: #721c24; }
-      
-      .progress { background: #e9ecef; border-radius: 5px; overflow: hidden; margin: 20px 0; }
-      .progress-bar { background: #007bff; height: 30px; width: 0%; transition: width 0.3s; }
-      
-      nav { margin-bottom: 20px; }
-      nav a { margin-right: 15px; text-decoration: none; color: #007bff; }
-      
-      pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
-    </style>
-    `;
-  }
-
-  private getNavigationBar(): string {
-    return `
-    <nav>
-      <a href="/">🏠 Dashboard</a>
-      <a href="/performance">📊 Performance</a>
-      <a href="/trades">📈 Trade History</a>
-      <a href="/test">🧪 Test Functions</a>
-      <a href="/api/health" target="_blank">🔍 API Health</a>
-    </nav>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 20px; }
+        h2 { color: #555; margin-top: 30px; margin-bottom: 15px; }
+        .btn { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-shutdown { background: #6c757d; color: white; }
+        .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
+        .status.active { background: #d4edda; color: #155724; }
+        .status.paused { background: #f8d7da; color: #721c24; }
+        .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; }
+        .stat-label { color: #666; margin-top: 5px; }
+        .positive { color: #28a745; }
+        .negative { color: #dc3545; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+        .metric-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 2.5em; font-weight: bold; }
+        .metric-label { color: #666; margin-top: 10px; }
+        .trades-list { margin: 20px 0; }
+        .trade-item { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+        .trade-date { color: #666; font-size: 0.9em; }
+        .trades-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .trades-table th, .trades-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .trades-table th { background: #f8f9fa; font-weight: bold; }
+        .controls { margin: 20px 0; }
+        .test-results { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .test-success { border-left: 4px solid #28a745; }
+        .test-error { border-left: 4px solid #dc3545; }
+        .shutdown-warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .shutdown-confirmation { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0; }
+      </style>
     `;
   }
 

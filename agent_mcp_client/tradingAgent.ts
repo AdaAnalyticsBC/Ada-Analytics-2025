@@ -131,8 +131,13 @@ export class AutonomousTradingAgent {
         aiService: this.aiService
       },
       {
-        getAgentState: () => this.state,
-        updateAgentState: (updates) => this.updateAgentState(updates)
+        getAgentState: () => {
+          // Return current state (will be updated by background sync)
+          return this.state;
+        },
+        updateAgentState: async (updates) => {
+          await this.updateAgentState(updates);
+        }
       },
       {
         stopAllMCPServers: () => this.stopAllMCPServers(),
@@ -259,6 +264,12 @@ export class AutonomousTradingAgent {
       return;
     }
 
+    // Check if agent should run based on time and day
+    if (!this.shouldAgentRun()) {
+      this.logger.log('STATUS', 'Agent should not run at this time - Skipping trading workflow');
+      return;
+    }
+
     try {
       // Trading workflow header
       this.logger.log('STATUS', '🚀 DAILY TRADING WORKFLOW STARTED');
@@ -340,27 +351,85 @@ export class AutonomousTradingAgent {
   }
 
   /**
+   * Sync agent state from database
+   */
+  private async syncStateFromDatabase(): Promise<void> {
+    try {
+      const dbState = await this.databaseService.getAgentState();
+      if (dbState) {
+        this.state = { ...this.state, ...dbState };
+        this.logger.log('STATUS', 'Agent state synced from database');
+      }
+    } catch (error) {
+      this.logger.log('ALERT', `Failed to sync state from database: ${error}`);
+    }
+  }
+
+  /**
+   * Check if agent should run based on current time and day
+   */
+  private shouldAgentRun(): boolean {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    
+    // Check if it's a weekday (Monday = 1, Friday = 5)
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      this.logger.log('STATUS', `Weekend detected (${dayOfWeek === 0 ? 'Sunday' : 'Saturday'}) - Agent will not run`);
+      return false;
+    }
+    
+    // Check if it's within the trading window (6 AM to 5 PM EST)
+    const currentTime = hour * 60 + minute;
+    const tradingStart = 6 * 60; // 6 AM
+    const tradingEnd = 17 * 60; // 5 PM
+    
+    if (currentTime < tradingStart || currentTime > tradingEnd) {
+      this.logger.log('STATUS', `Outside trading hours (${hour}:${minute.toString().padStart(2, '0')}) - Agent will not run`);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * Setup cron jobs
    */
   setupCronJobs(): void {
+    this.logger.log('STATUS', '📅 Setting up cron jobs...');
+    
+    // Log the current time and next execution times
+    const now = new Date();
+    this.logger.log('STATUS', `Current time: ${now.toLocaleString('en-US', { timeZone: 'America/New_York' })} EST`);
+    
     // Daily workflow - runs at 6 AM EST (data collection and planning)
     cron(CRON_SCHEDULES.DAILY_TRADING, async () => {
+      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+      this.logger.log('STATUS', `⏰ CRON TRIGGERED: Daily trading workflow at ${executionTime} EST`);
       this.logger.log('STATUS', 'Starting scheduled trading workflow');
       await this.runTradingWorkflow();
     });
 
     // End of day summary - runs at 5 PM EST
     cron(CRON_SCHEDULES.END_OF_DAY_SUMMARY, async () => {
+      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+      this.logger.log('STATUS', `⏰ CRON TRIGGERED: End of day summary at ${executionTime} EST`);
       this.logger.log('STATUS', 'Starting end-of-day summary');
       await this.sendDailySummary();
     });
 
     // Cleanup old logs - runs weekly on Sunday at midnight
     cron(CRON_SCHEDULES.WEEKLY_CLEANUP, async () => {
+      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+      this.logger.log('STATUS', `⏰ CRON TRIGGERED: Weekly cleanup at ${executionTime} EST`);
       await this.databaseService.cleanupOldLogs();
     });
 
     this.logger.log('STATUS', '📅 Cron jobs scheduled successfully');
+    this.logger.log('STATUS', `- Daily Trading: ${CRON_SCHEDULES.DAILY_TRADING} (6 AM EST, weekdays)`);
+    this.logger.log('STATUS', `- End of Day Summary: ${CRON_SCHEDULES.END_OF_DAY_SUMMARY} (5 PM EST, weekdays)`);
+    this.logger.log('STATUS', `- Weekly Cleanup: ${CRON_SCHEDULES.WEEKLY_CLEANUP} (Sunday midnight)`);
   }
 
   /**
@@ -395,6 +464,11 @@ export class AutonomousTradingAgent {
           Array.from(this.activeClients.keys())
         );
       }
+      
+      // Setup periodic state sync (every 5 minutes)
+      setInterval(async () => {
+        await this.syncStateFromDatabase();
+      }, 5 * 60 * 1000);
       
       // Log startup completion
       this.logStartupSummary();
@@ -567,22 +641,41 @@ export class AutonomousTradingAgent {
 
   private async updateAgentState(updates: Partial<AgentState>): Promise<void> {
     this.state = { ...this.state, ...updates };
-    await this.saveState();
+    await this.databaseService.updateAgentState(updates);
   }
 
   private async saveState(): Promise<void> {
     try {
-      await Deno.writeTextFile(FILE_PATHS.AGENT_STATE, JSON.stringify(this.state, null, 2));
+      await this.databaseService.storeAgentState(this.state);
     } catch (error) {
-      this.logger.log('ALERT', `Failed to save state: ${error}`);
+      this.logger.log('ALERT', `Failed to save state to database: ${error}`);
+      // Fallback to local file if database fails
+      try {
+        await Deno.writeTextFile(FILE_PATHS.AGENT_STATE, JSON.stringify(this.state, null, 2));
+        this.logger.log('STATUS', 'State saved to local file as fallback');
+      } catch (fileError) {
+        this.logger.log('ALERT', `Failed to save state to file: ${fileError}`);
+      }
     }
   }
 
   private async loadState(): Promise<void> {
     try {
-      const stateData = await Deno.readTextFile(FILE_PATHS.AGENT_STATE);
-      this.state = { ...this.state, ...JSON.parse(stateData) };
-      this.logger.log('STATUS', 'Agent state loaded successfully');
+      // Try to load from database first
+      const dbState = await this.databaseService.getAgentState();
+      if (dbState) {
+        this.state = { ...this.state, ...dbState };
+        this.logger.log('STATUS', 'Agent state loaded from database');
+      } else {
+        // Fallback to local file if no database state
+        try {
+          const stateData = await Deno.readTextFile(FILE_PATHS.AGENT_STATE);
+          this.state = { ...this.state, ...JSON.parse(stateData) };
+          this.logger.log('STATUS', 'Agent state loaded from local file');
+        } catch (fileError) {
+          this.logger.log('STATUS', 'No existing state found, using defaults');
+        }
+      }
       
       // Sync account balance with live data if services are connected
       if (this.activeClients.has('alpaca') && !this.state.is_paused) {
@@ -593,7 +686,8 @@ export class AutonomousTradingAgent {
         }
       }
     } catch (error) {
-      this.logger.log('STATUS', 'No existing state found, using defaults');
+      this.logger.log('ALERT', `Failed to load state: ${error}`);
+      this.logger.log('STATUS', 'Using default agent state');
     }
   }
 
