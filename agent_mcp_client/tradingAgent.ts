@@ -457,15 +457,15 @@ export class AutonomousTradingAgent {
       // Start web server
       await this.webServer.start();
       
-      // Send startup notification (only if not in development mode)
-      const isDevelopment = Deno.env.get('NODE_ENV') === 'development' || !Deno.env.get('RAILWAY_ENVIRONMENT');
-      if (this.emailService.isConfigured() && !isDevelopment) {
+      // Send startup notification (only in production)
+      const isProduction = Deno.env.get('RAILWAY_ENVIRONMENT') && Deno.env.get('NODE_ENV') !== 'development';
+      if (this.emailService.isConfigured() && isProduction) {
         await this.emailService.sendStartupNotification(
           this.state.account_balance,
           Array.from(this.activeClients.keys())
         );
-      } else if (isDevelopment) {
-        this.logger.log('STATUS', '📧 Skipping startup email (development mode)');
+      } else {
+        this.logger.log('STATUS', '📧 Skipping startup email (development/local mode)');
       }
       
       // Setup periodic state sync (every 5 minutes)
@@ -550,9 +550,9 @@ export class AutonomousTradingAgent {
         }
       }
 
-      // 8. Send shutdown notification (only if not in development mode)
-      const isDevelopment = Deno.env.get('NODE_ENV') === 'development' || !Deno.env.get('RAILWAY_ENVIRONMENT');
-      if (this.emailService.isConfigured() && !isDevelopment) {
+      // 8. Send shutdown notification (only in production)
+      const isProduction = Deno.env.get('RAILWAY_ENVIRONMENT') && Deno.env.get('NODE_ENV') !== 'development';
+      if (this.emailService.isConfigured() && isProduction) {
         try {
           await this.emailService.sendShutdownNotification(
             reason,
@@ -562,8 +562,8 @@ export class AutonomousTradingAgent {
         } catch (error) {
           this.logger.log('ALERT', `Failed to send shutdown email: ${error}`);
         }
-      } else if (isDevelopment) {
-        this.logger.log('STATUS', '📧 Skipping shutdown email (development mode)');
+      } else {
+        this.logger.log('STATUS', '📧 Skipping shutdown email (development/local mode)');
       }
 
       this.logger.log('STATUS', '✅ Graceful shutdown completed');
