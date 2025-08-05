@@ -73,6 +73,10 @@
 				<div 
 					class="absolute inset-0 bg-black/50 backdrop-blur-sm"
 					onclick={() => mobileMenuOpen = false}
+					onkeydown={(e) => e.key === 'Escape' && (mobileMenuOpen = false)}
+					role="button"
+					tabindex="0"
+					aria-label="Close mobile menu"
 				></div>
 				<div class="md:hidden py-4 border-t border-slate-200 dark:border-slate-700 animate-slide-down">
 					<div class="flex flex-col space-y-4">
