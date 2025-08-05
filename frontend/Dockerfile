@@ -1,5 +1,5 @@
 # 📊 Ada Analytics Frontend Dashboard - Railway Deployment
-FROM node:22-alpine AS builder
+FROM node:20.19.3-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +18,7 @@ RUN yarn build
 RUN yarn install --production --ignore-scripts --prefer-offline
 
 # Production stage
-FROM node:22-alpine
+FROM node:20.19.3-alpine
 
 # Set working directory
 WORKDIR /app
