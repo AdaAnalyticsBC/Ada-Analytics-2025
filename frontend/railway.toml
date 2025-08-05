@@ -7,5 +7,5 @@ NODE_VERSION = "22"
 [deploy]
 startCommand = "node build"
 healthcheckPath = "/"
-healthcheckTimeout = 60
+healthcheckTimeout = 45
 restartPolicyType = "always"
