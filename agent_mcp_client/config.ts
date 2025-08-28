@@ -95,14 +95,17 @@ export const MCP_SERVERS: Record<string, MCPServerConfig> = (() => {
 export const TRADING_CONFIG = {
   MAX_TRADES_PER_DAY: 2,
   RISK_PER_TRADE: 0.01, // 1% of account balance
-  STOP_LOSS_PERCENTAGE: 0.05, // 5% stop loss
+  STOP_LOSS_PERCENTAGE: 0.06, // 6% stop loss (updated from 5%)
   TAKE_PROFIT_PERCENTAGE: 0.10, // 10% take profit
   MIN_CONFIDENCE_THRESHOLD: 0.6,
   MARKET_OPEN_HOUR: 9,
   MARKET_OPEN_MINUTE: 30,
   MARKET_CLOSE_HOUR: 16,
   MARKET_CLOSE_MINUTE: 0,
-  REQUEST_DELAY_MS: 1000 // 1 second delay between requests
+  REQUEST_DELAY_MS: 1000, // 1 second delay between requests
+  // Enhanced Exit Strategy
+  BATCH_EXIT_LEVELS: [0.50, 0.30, 0.20], // 50%, 30%, 20%
+  BATCH_PROFIT_LEVELS: [0.10, 0.15, 0.20] // +10%, +15%, +20%
 };
 
 // Email Configuration

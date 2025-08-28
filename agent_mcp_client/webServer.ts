@@ -128,10 +128,34 @@ export class WebServer {
           return await this.handleTestRequest(path, url, request);
         }
 
-        // Redirect dashboard routes to Svelte frontend
-        if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/performance') || path.startsWith('/trades')) {
-          const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173';
-          return Response.redirect(`${frontendUrl}${path}`, 302);
+        // Handle root and dashboard routes
+        if (path === '/') {
+          // For Railway deployment, serve a simple status page or redirect to frontend
+          const frontendUrl = Deno.env.get('FRONTEND_URL');
+          if (frontendUrl) {
+            return Response.redirect(frontendUrl, 302);
+          }
+          // Serve simple status page if no frontend URL configured
+          return this.createHtmlResponse(`
+            <html>
+              <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1>🤖 Ada Analytics Trading Agent</h1>
+                <p>API Server is running</p>
+                <p><a href="/api/health">Health Check</a></p>
+                <p><a href="/test">Test Functions</a></p>
+              </body>
+            </html>
+          `);
+        }
+
+        // For other dashboard routes, redirect to frontend if configured
+        if (path.startsWith('/dashboard') || path.startsWith('/performance') || path.startsWith('/trades')) {
+          const frontendUrl = Deno.env.get('FRONTEND_URL');
+          if (frontendUrl) {
+            return Response.redirect(`${frontendUrl}${path}`, 302);
+          }
+          // If no frontend URL, return 404
+          return this.createNotFoundResponse();
         }
 
         // Default to 404
