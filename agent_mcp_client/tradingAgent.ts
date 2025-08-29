@@ -34,6 +34,7 @@ import { DirectAlpacaService } from './services/directAlpacaService.ts';
 import { EmailService } from './services/emailService.ts';
 import { DatabaseService } from './services/databaseService.ts';
 import { AIService } from './services/aiService.ts';
+import { EnhancedStrategyService } from './services/enhancedStrategyService.ts';
 import { ITradingService } from './types/interfaces.ts';
 
 // Import utilities
@@ -55,6 +56,7 @@ export class AutonomousTradingAgent {
   private emailService!: EmailService;
   private databaseService!: DatabaseService;
   private aiService!: AIService;
+  private enhancedStrategyService!: EnhancedStrategyService;
   private webServer!: WebServer;
   
   // System components
@@ -119,6 +121,7 @@ export class AutonomousTradingAgent {
     this.emailService = new EmailService(this.logger, Deno.env.get("BASE_URL") || 'http://localhost:8080');
     this.databaseService = new DatabaseService(null, this.logger);
     this.aiService = new AIService(this.logger);
+    this.enhancedStrategyService = new EnhancedStrategyService(this.logger);
 
     // Initialize web server
     this.webServer = new WebServer(
@@ -286,37 +289,45 @@ export class AutonomousTradingAgent {
       this.logger.log('ANALYSIS', 'Step 3: Running AI predictions...');
       tradePlan = await this.aiService.makePredictions(tradePlan, marketData, this.state);
 
-      // Step 4: Finalize trade plan
+      // Step 4: Finalize trade plan (legacy step)
       this.logger.log('PLAN', 'Step 4: Finalizing trade plan...');
       tradePlan = await this.finalizeTradePlan(tradePlan);
-      
-      // Show trade plan summary
-      this.logTradePlanSummary(tradePlan);
 
-      // Step 5: Email trade plan
-      this.logger.log('STATUS', 'Step 5: Sending trade plan notifications...');
-      const pauseToken = await this.emailService.sendTradePlanEmail(tradePlan);
+      // Step 4.5: Apply Enhanced Strategy (NEW - Beta Distribution + Breakout Filtering)
+      this.logger.log('ANALYSIS', 'Step 4.5: Applying Enhanced Strategy (Beta Distribution + Breakout Filtering)...');
+      const enhancedPlan = await this.enhancedStrategyService.enhanceTradePlan(tradePlan, marketData, this.state);
+      
+      // Show enhanced trade plan summary
+      this.logEnhancedTradePlanSummary(enhancedPlan);
+
+      // Step 5: Email enhanced trade plan
+      this.logger.log('STATUS', 'Step 5: Sending enhanced trade plan notifications...');
+      const pauseToken = await this.emailService.sendTradePlanEmail(enhancedPlan);
       this.state.pause_token = pauseToken;
       await this.saveState();
 
       // Step 6: Wait for market open if needed
       await this.tradingService.waitForMarketOpen();
 
-      // Step 7: Execute trades
-      if (tradePlan.trades.length > 0) {
-        this.logger.log('TRADE', `Step 7: Executing ${tradePlan.trades.length} trades...`);
-        const executedTrades = await this.tradingService.executeTrades(tradePlan, this.state);
+      // Step 7: Execute Enhanced Strategy
+      if (enhancedPlan.enhanced_trades.length > 0) {
+        this.logger.log('TRADE', `Step 7: Executing Enhanced Strategy with ${enhancedPlan.enhanced_trades.length} trades...`);
+        const strategyResult = await this.enhancedStrategyService.executeEnhancedStrategy(
+          enhancedPlan, 
+          this.tradingService, 
+          this.state
+        );
         
-        this.logExecutionResults(executedTrades);
+        this.logEnhancedExecutionResults(strategyResult);
 
         // Step 8: Store trades with enhanced data
-        if (executedTrades.filter(t => t.status === 'executed').length > 0) {
-          this.logger.log('STATUS', 'Step 8: Storing trade records...');
-          const thoughtChain = this.generateThoughtChain(tradePlan, executedTrades);
-          await this.databaseService.storeTrades(executedTrades, tradePlan, thoughtChain);
+        if (strategyResult.executed_trades.filter(t => t.status === 'executed').length > 0) {
+          this.logger.log('STATUS', 'Step 8: Storing enhanced trade records...');
+          const thoughtChain = this.generateEnhancedThoughtChain(enhancedPlan, strategyResult.executed_trades);
+          await this.databaseService.storeTrades(strategyResult.executed_trades, enhancedPlan, thoughtChain);
         }
       } else {
-        this.logger.log('STATUS', 'No trades to execute today');
+        this.logger.log('STATUS', 'No trades passed enhanced filtering - no trades to execute today');
       }
 
       // Update state
@@ -778,5 +789,87 @@ export class AutonomousTradingAgent {
     } else {
       this.logger.log('ALERT', 'Email Alerts: DISABLED (Configure RESEND_API_KEY)');
     }
+    this.logger.log('STATUS', '🚀 Enhanced Strategy: Beta Distribution + Breakout Filtering ENABLED');
+  }
+
+  /**
+   * Log enhanced trade plan summary
+   */
+  private logEnhancedTradePlanSummary(enhancedPlan: any): void {
+    const metrics = enhancedPlan.strategy_performance;
+    
+    this.logger.log('PLAN', `📋 ENHANCED TRADE PLAN SUMMARY`);
+    this.logger.log('PLAN', `Original trades: ${metrics.original_trade_count} → Enhanced trades: ${metrics.filtered_trade_count}`);
+    this.logger.log('PLAN', `Risk exposure: ${(enhancedPlan.total_risk_exposure * 100).toFixed(2)}%`);
+    this.logger.log('PLAN', `Average breakout probability: ${(metrics.average_breakout_probability * 100).toFixed(1)}%`);
+    this.logger.log('PLAN', `Strategy confidence: ${(metrics.strategy_confidence * 100).toFixed(1)}%`);
+    
+    if (enhancedPlan.enhanced_trades.length > 0) {
+      enhancedPlan.enhanced_trades.forEach((trade: any, i: number) => {
+        this.logger.log('PLAN', 
+          `${i + 1}. ${trade.action} ${trade.enhanced_quantity} ${trade.symbol} @ $${trade.price_target.toFixed(2)} ` +
+          `(Pos: ${(trade.position_sizing.position_percentage * 100).toFixed(2)}%, BP: ${(trade.breakout_probability * 100).toFixed(1)}%)`
+        );
+      });
+    }
+  }
+
+  /**
+   * Log enhanced execution results
+   */
+  private logEnhancedExecutionResults(strategyResult: any): void {
+    const summary = strategyResult.execution_summary;
+    
+    this.logger.log('TRADE', `🔄 ENHANCED STRATEGY EXECUTION RESULTS`);
+    this.logger.log('TRADE', `Trades planned: ${summary.trades_planned} → Filtered: ${summary.trades_filtered} → Executed: ${summary.trades_executed}`);
+    this.logger.log('TRADE', `Success rate: ${summary.strategy_effectiveness.toFixed(1)}%`);
+    this.logger.log('TRADE', `Total position value: $${summary.total_position_value.toLocaleString()}`);
+    
+    if (strategyResult.executed_trades.length > 0) {
+      strategyResult.executed_trades.forEach((trade: any, i: number) => {
+        const status = trade.status === 'executed' ? '✅' : '❌';
+        this.logger.log('TRADE', 
+          `${status} ${i + 1}. ${trade.action} ${trade.executed_quantity} ${trade.symbol} ` +
+          `${trade.status === 'executed' ? `@ $${trade.filled_avg_price || trade.price_target}` : '(Failed)'}`
+        );
+      });
+    } else {
+      this.logger.log('TRADE', '⚠️ No trades executed');
+    }
+  }
+
+  /**
+   * Generate enhanced thought chain for database storage
+   */
+  private generateEnhancedThoughtChain(enhancedPlan: any, executedTrades: ExecutedTrade[]): string[] {
+    const thoughtChain = [
+      `Enhanced strategy applied with Beta distribution position sizing and breakout filtering`,
+      `Market analysis: ${enhancedPlan.market_analysis}`,
+      `Risk assessment: ${enhancedPlan.risk_assessment}`,
+      `Strategy: ${this.state.current_strategy}`,
+      `Account balance: $${this.state.account_balance}`,
+      `Original trades: ${enhancedPlan.strategy_performance.original_trade_count}`,
+      `Trades after filtering: ${enhancedPlan.enhanced_trades.length}`,
+      `Trades executed: ${executedTrades.filter(t => t.status === 'executed').length}`,
+      `Total risk exposure: ${(enhancedPlan.total_risk_exposure * 100).toFixed(2)}%`,
+      `Average signal strength: ${(enhancedPlan.strategy_performance.average_signal_strength * 100).toFixed(1)}%`,
+      `Average breakout probability: ${(enhancedPlan.strategy_performance.average_breakout_probability * 100).toFixed(1)}%`,
+      `Beta distribution parameters: a=2, b=5`,
+      `Breakout threshold: 40%`,
+      `Position sizing formula: position_pct = 0.10 * beta.cdf(signal_strength, 2, 5)`
+    ];
+
+    // Add individual trade thoughts
+    enhancedPlan.enhanced_trades.forEach((trade: any, index: number) => {
+      thoughtChain.push(
+        `Trade ${index + 1} (${trade.symbol}): ` +
+        `Signal: ${(trade.position_sizing.signal_strength * 100).toFixed(1)}%, ` +
+        `Position: ${(trade.position_sizing.position_percentage * 100).toFixed(2)}%, ` +
+        `Breakout: ${(trade.breakout_probability * 100).toFixed(1)}%, ` +
+        `Quantity: ${trade.enhanced_quantity}`
+      );
+    });
+
+    return thoughtChain;
   }
 }
